@@ -4,7 +4,7 @@ import numpy as np
 
 import torch
 import torchvision
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, random_split
 
 class FashionMnistDataset(Dataset):
     # available on latte but if not, download from https://github.com/zalandoresearch/fashion-mnist and gunzip
@@ -38,24 +38,24 @@ class FashionMnistDataset(Dataset):
 
         return torch.Tensor(np.array(image)), label
 
-class FashionMnist():
-    def __init__(self, batch_size=32, path="/datasets/fashion_mnist", transform=None, shuffle=True):
-        self.batch_size = batch_size
-        self.path = path
-        self.transform = transform
-        self.shuffle = shuffle
+def get_fashion_mnist_dataloader(batch_size):
+    train_dataset = FashionMnistDataset(train=True)
 
-    def get_train_dataloader(self):
-        train_dataset = FashionMnistDataset(train=True, path=self.path, transform=self.transform)
-        return DataLoader(dataset=train_dataset, batch_size=self.batch_size, shuffle=self.shuffle)
+    lengths = [int(len(train_dataset)*0.8), int(len(train_dataset)*0.2)]
+    split_train_dataset, split_val_dataset = random_split(train_dataset, lengths)
 
-    def get_test_dataloader(self):
-        test_dataset = FashionMnistDataset(train=True, path=self.path, transform=self.transform)
-        return DataLoader(dataset=test_dataset, batch_size=self.batch_size, shuffle=self.shuffle)
+    def loss_fn(x):
+        torch.nn.CrossEntropyLoss()
+
+    return (DataLoader(dataset=split_train_dataset, batch_size=batch_size, shuffle=True),
+            DataLoader(dataset=split_val_dataset, batch_size=batch_size, shuffle=True),
+            loss_fn)
 
 if __name__ == "__main__":
     print("[*] Testing FashionMnist")
-    testFashionMnist = FashionMnist()
-    testTrainDataLoader = testFashionMnist.get_train_dataloader()
-    inp, label = next(iter(testTrainDataLoader))
+    test_train_dataloader, test_val_dataloader, loss_fn = get_fashion_mnist_dataloader(32)
+    inp, label = next(iter(test_train_dataloader))
     print(inp, label)
+    inp, label = next(iter(test_val_dataloader))
+    print(inp, label)
+    print(loss_fn)
