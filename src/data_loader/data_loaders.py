@@ -3,6 +3,7 @@ import gzip
 import numpy as np
 
 import torch
+import torch.nn as nn
 import torchvision
 from torch.utils.data import Dataset, DataLoader, random_split
 
@@ -45,7 +46,7 @@ def get_fashion_mnist_dataloader(batch_size):
     split_train_dataset, split_val_dataset = random_split(train_dataset, lengths)
 
     def loss_fn(x):
-        torch.nn.CrossEntropyLoss()
+        nn.CrossEntropyLoss()
 
     return (DataLoader(dataset=split_train_dataset, batch_size=batch_size, shuffle=True),
             DataLoader(dataset=split_val_dataset, batch_size=batch_size, shuffle=True),
