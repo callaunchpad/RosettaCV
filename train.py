@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import wandb
 
 from src.models.DenoisingAE import Encoder, Decoder, DenoisingAE
 from src.data_loader.data_loaders import get_fashion_mnist_dataloader
@@ -33,9 +34,13 @@ def train(model, num_epochs=10, batch_size=32, learning_rate=1e-3):
             optimizer.step()
             optimizer.zero_grad()
 
+        wandb.log({ "epoch": epoch + 1, "loss": float(loss) })
         print('Epoch:{} Loss:{:.4f}'.format(epoch+1, float(loss)))
+        
 
 encoder = Encoder().to(device)
 decoder = Decoder().to(device)
 model = DenoisingAE(encoder, decoder).to(device)
-train(model)
+with wandb.init(project="DenoisingAE"):
+    train(model)
+    wandb.alert(title="Train DenoisingAE", text="Finished training")
