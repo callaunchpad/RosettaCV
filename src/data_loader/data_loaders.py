@@ -48,3 +48,28 @@ if __name__=='__main__':
     loader = inet_denoising.loader(train=True, batch_size=32)
     for images, labels in loader:
         print(images.shape, labels.shape)
+
+class OmniglotTask(Task)):
+    def loader(self, train: bool, batch_size):
+        """
+        train: true if for train dataset, false if for test dataset
+        """
+        
+        data = torchvision.datasets.Omniglot(
+            root="/datasets/", background = train, download=True, transform=torchvision.transforms.ToTensor()
+        ) 
+            
+        dataloader = torch.utils.data.DataLoader(train, batch_size = batch_size, shuffle = True, num_workers = 2)
+
+        return dataloader
+
+class OmniglotClass(OmniglotTask):
+    def loss_fn(self):
+        return torch.nn.CrossEntropyLoss
+
+class OmniglotDenoising(OmniglotTask):
+    def loss_fn(self):
+        return torch.nn.MSELoss
+    
+
+
