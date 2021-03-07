@@ -17,3 +17,12 @@ class MNISTLoader():
         loss_fn = nn.CrossEntropyLoss()
 
         return (train_dataloader, validation_dataloader, loss_fn)
+
+if __name__=='__main__':
+    print('MNIST Loader: Testing')
+    test_train_dataloader, test_val_dataloader, loss_fn = MNISTLoader.get_mnist_dataloader(32)
+    inp, label = next(iter(test_train_dataloader))
+    print(inp, label)
+    inp, label = next(iter(test_val_dataloader))
+    print(inp, label)
+    print(loss_fn)
