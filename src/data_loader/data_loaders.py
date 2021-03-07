@@ -1,9 +1,55 @@
 import torch
-import torchvision
+from torchvision.datasets import ImageFolder
+from torchvision import transforms
 
-class OmniglotLoader():
-# class OmniglotLoader(Task):
+class Task:
     
+    def loader(self, **kwargs):
+        """
+        Get Pytorch DataLoader corresponding to task data.
+        """
+        raise NotImplemented
+
+    def loss_fn(self):
+        raise NotImplemented
+
+class ImageNetTask(Task):
+
+    # override this for tasks involving pre-processing
+    transform = transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.ToTensor()
+    ])
+
+    def loader(self, train: bool, **kwargs):
+        """
+        train: whether to get loader for train or test dataset
+        kwargs: arguments for DataLoader
+        NOTE: relies on installation on CSUA server
+        """
+        if train:
+            return torch.utils.data.DataLoader(ImageFolder('/datasets/imagenetwhole/ilsvrc2012/train/',
+                                                           transform=self.transform), shuffle=True, **kwargs)
+        else:
+            return torch.utils.data.DataLoader(ImageFolder('/datasets/imagenetwhole/ilsvrc2012/val/',
+                                                           transform=self.transform), shuffle=True, **kwargs)
+
+class ImageNetClass(ImageNetTask):
+    def loss_fn(self):
+        return torch.nn.CrossEntropyLoss
+
+class ImageNetDenoising(ImageNetTask):
+    def loss_fn(self):
+        return torch.nn.MSELoss
+
+if __name__=='__main__':
+    inet_denoising = ImageNetDenoising()
+    loader = inet_denoising.loader(train=True, batch_size=32)
+    for images, labels in loader:
+        print(images.shape, labels.shape)
+
+class OmniglotTask(Task)):
     def loader(self, train: bool, batch_size):
         """
         train: true if for train dataset, false if for test dataset
@@ -11,14 +57,19 @@ class OmniglotLoader():
         
         data = torchvision.datasets.Omniglot(
             root="/datasets/", background = train, download=True, transform=torchvision.transforms.ToTensor()
-        ) #TODO: should automatically create folders for train and valid, change if this doesnt happen
+        ) 
             
         dataloader = torch.utils.data.DataLoader(train, batch_size = batch_size, shuffle = True, num_workers = 2)
 
-        
-
         return dataloader
-    
+
+class OmniglotClass(OmniglotTask):
     def loss_fn(self):
-        return torch.nn.MSELoss #take that joey
+        return torch.nn.CrossEntropyLoss
+
+class OmniglotDenoising(OmniglotTask):
+    def loss_fn(self):
+        return torch.nn.MSELoss
+    
+
 
