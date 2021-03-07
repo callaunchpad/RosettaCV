@@ -43,11 +43,6 @@ class ImageNetDenoising(ImageNetTask):
     def loss_fn(self):
         return torch.nn.MSELoss
 
-if __name__=='__main__':
-    inet_denoising = ImageNetDenoising()
-    loader = inet_denoising.loader(train=True, batch_size=32)
-    for images, labels in loader:
-        print(images.shape, labels.shape)
 
 class OmniglotTask(Task)):
     def loader(self, train: bool, batch_size):
@@ -71,5 +66,11 @@ class OmniglotDenoising(OmniglotTask):
     def loss_fn(self):
         return torch.nn.MSELoss
     
+
+if __name__=='__main__':
+    inet_denoising = ImageNetDenoising()
+    loader = inet_denoising.loader(train=True, batch_size=32)
+    for images, labels in loader:
+        print(images.shape, labels.shape)
 
 
