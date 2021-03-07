@@ -1,21 +1,19 @@
 import torch
 import torch.nn as nn
-<<<<<<< HEAD
 import wandb
-=======
->>>>>>> be78741d0ab7d70b17585fbeec86ca4a04ce3530
 
-from src.models.DenoisingAE import Encoder, Decoder, DenoisingAE
-from src.data_loader.data_loaders import get_fashion_mnist_dataloader
+from models.DenoisingAE import Encoder, Decoder, DenoisingAE
+from data_loader.data_loaders import FashionMnistDenoising
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 def train(model, num_epochs=10, batch_size=32, learning_rate=1e-3):
     print("[*] Training DenoisingAE on FashionMNIST")
+    fashion_mnist_denoise = FashionMnistDenoising()
     torch.manual_seed(7)
-    criterion = nn.MSELoss()
+    criterion = fashion_mnist_denoise.loss_fn()
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-5)
-    train_dl, val_dl, _ = get_fashion_mnist_dataloader(batch_size)
+    train_dl = fashion_mnist_denoise.loader(True, batch_size=32)
 
     for epoch in range(num_epochs):
         for img, _ in train_dl:
