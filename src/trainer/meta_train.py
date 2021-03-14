@@ -56,23 +56,26 @@ def inner_train_loop(model, optimizer, data_loaders, loss_fn, device, num_iters)
 
     return model, total_loss
 
+def maml_inner_train(model, optimizer, data_loaders, loss_fn, device, num_iters):
+    return None
 
-def outer_train_loop(model, optimizer, train_tasks, val_tasks,
-                     device, num_iters_inner, num_iters_outer,
-                     update_parameters, update_param_kwargs=None):
+def outer_train_loop(model, optimizer, train_tasks,
+                     num_iters_inner, num_iters_outer,
+                     update_parameters_inner, update_parameters,
+                     device, update_param_kwargs=None):
     """Meta train a model
 
     Args:
         model (nn.Module): Initialized model to meta-train.
         optimizer (torch.optim): Optimizer to train inner loop.
         train_tasks (arr): Array of Task objects. 
-        val_tasks (arr): Array of Task objects for validation.
         batch_size (int): batch size for data loaders.
-        device (torch.device): Device to train on. 
         num_iters_inner (int): Number of training iterations in the inner loop. 
                                One step = one parameter update in the inner loop.
         num_iters_outer (int): Number of outer steps. How many times the init parameters are updated.
+        update_parameters_inner: Function for the inner update step. MAML requires a different inner training loop
         update_parameters (function): Function to update the init params. This should take in fn(model, init_params, new_params)
+        device (torch.device): Device to train on. 
 
     Returns:
         nn.parameter: Final initialization parameters.
@@ -98,7 +101,7 @@ def outer_train_loop(model, optimizer, train_tasks, val_tasks,
             # Inner train using each dataloader received
             model.load_state_dict(init_params)
 
-            new_model, total_loss = inner_train_loop(model, optimizer, 
+            new_model, total_loss = update_parameters_inner(model, optimizer, 
                                          data_loaders, loss_fn, 
                                          device, num_iters_inner)
             
