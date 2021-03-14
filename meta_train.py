@@ -58,7 +58,7 @@ def inner_train_loop(model, optimizer, data_loaders, loss_fn, device, num_iters)
 
 def outer_train_loop(model, optimizer, train_tasks, val_tasks, loss_fn,
                      device, num_iters_inner, num_iters_outer,
-                     update_parameters):
+                     update_parameters, update_param_kwargs=None):
     """Meta train a model
 
     Args:
@@ -83,26 +83,30 @@ def outer_train_loop(model, optimizer, train_tasks, val_tasks, loss_fn,
     iters = 0
 
     while iters < num_iters_outer:
+        delta_params = init_params
         for task in all_data_loaders:
             if iters > num_iters_outer:
                 break
 
             # Inner train using each dataloader received
-            
             model.load_state_dict(init_params)
 
-            dataloaders = {"train": task.loader("train")}
+            dataloaders = {"train": task.loader("train"), "val": task.loader("val")}
+            loss_fn = task.loss_fn
             # TODO do i have to re-instantiate optimizer
             new_model = inner_train_loop(model, optimizer, 
-                                         data_loader, loss_fn, 
+                                         dataloaders, loss_fn, 
                                          device, num_iters_inner)
             
             new_params = new_model.state_dict()
 
             # Update initial parameters using update_parameters function
-            init_params = update_parameters(model, init_params, new_params)
+            delta_params += update_parameters(model, init_params, new_params, loss_fn, update_param_kwargs)
 
             iters += 1
+
+        init_params = delta_params
+
 
     time_elapsed = time.time() - since
     print('Training complete in {:.0f}m {:.0f}s'.format(
