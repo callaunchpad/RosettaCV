@@ -24,7 +24,7 @@ def inner_train_loop(model, optimizer, data_loaders, loss_fn, device, num_iters)
         data_loaders (dict): dictionary containing "train": train data loader 
         loss_fn (torch.function): loss function
         device (torch.device): gpu if enabled
-        num_iters (int): [description]
+        num_iters (int): number of iterations to train on
     """
     iters = 0
     while iters < num_iters:
@@ -51,12 +51,13 @@ def inner_train_loop(model, optimizer, data_loaders, loss_fn, device, num_iters)
             wandb.log({'inner_loss': loss})
             print("Loss ", loss)
 
+            total_loss += loss
             iters += 1
 
-    return model
+    return model, total_loss
 
 
-def outer_train_loop(model, optimizer, train_tasks, val_tasks, loss_fn,
+def outer_train_loop(model, optimizer, train_tasks, val_tasks,
                      device, num_iters_inner, num_iters_outer,
                      update_parameters, update_param_kwargs=None):
     """Meta train a model
@@ -67,7 +68,6 @@ def outer_train_loop(model, optimizer, train_tasks, val_tasks, loss_fn,
         train_tasks (arr): Array of Task objects. 
         val_tasks (arr): Array of Task objects for validation.
         batch_size (int): batch size for data loaders.
-        loss_fn (arr): Array of loss functions for inner loop training.
         device (torch.device): Device to train on. 
         num_iters_inner (int): Number of training iterations in the inner loop. 
                                One step = one parameter update in the inner loop.
@@ -82,30 +82,34 @@ def outer_train_loop(model, optimizer, train_tasks, val_tasks, loss_fn,
     init_params = model.state_dict()
     iters = 0
 
+    all_data_loaders = []
+    loss_fns = []
+    for task in train_tasks:
+        dataloaders = {"train": task.loader("train", batch_size=batch_size), "val": task.loader("val")}
+        all_data_loaders.append(dataloaders)
+        loss_fns.append(task.loss_fn())
+
     while iters < num_iters_outer:
         delta_params = init_params
-        for task in all_data_loaders:
+        for data_loaders, loss_fn in zip(all_data_loaders, loss_fns):
             if iters > num_iters_outer:
                 break
 
             # Inner train using each dataloader received
             model.load_state_dict(init_params)
 
-            dataloaders = {"train": task.loader("train"), "val": task.loader("val")}
-            loss_fn = task.loss_fn
-            # TODO do i have to re-instantiate optimizer
-            new_model = inner_train_loop(model, optimizer, 
-                                         dataloaders, loss_fn, 
+            new_model, total_loss = inner_train_loop(model, optimizer, 
+                                         data_loaders, loss_fn, 
                                          device, num_iters_inner)
             
             new_params = new_model.state_dict()
 
             # Update initial parameters using update_parameters function
-            delta_params += update_parameters(model, init_params, new_params, loss_fn, update_param_kwargs)
-
+            delta_params += update_parameters(model, init_params, new_params, total_loss, update_param_kwargs)
             iters += 1
 
         init_params = delta_params
+
 
 
     time_elapsed = time.time() - since
