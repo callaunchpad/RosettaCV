@@ -27,9 +27,3 @@ class CNN(nn.Module):
         out = self.fc1(out)
         out = self.fc2(out)
         return out
-
-learning_rate = 0.001
-
-model = CNN()
-criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=learning_rate)
