@@ -5,7 +5,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torchvision
-from torchvision import transforms
+from torchvision import datasets, transforms
 from torchvision.datasets import ImageFolder
 from torch.utils.data import Dataset, DataLoader, random_split
 
@@ -54,7 +54,6 @@ class ImageNetClass(ImageNetTask):
 class ImageNetDenoising(ImageNetTask):
     def loss_fn(self):
         return torch.nn.MSELoss()
-
 
 class OmniglotTask(Task):
     def loader(self, train: bool, **kwargs):
@@ -142,6 +141,38 @@ class FashionMnistDenoising(FashionMnistTask):
     def loss_fn(self):
         return torch.nn.MSELoss()
 
+class MNISTTask():
+    def loader(self, train: bool, **kwargs):
+        """
+        train: true for train dataset loader, false for validation dataset loader
+        kwargs: arguments for DataLoader
+        """
+        if 'batch_size' in kwargs:
+            self.batch_size = kwargs.pop('batch_size')
+        else:
+            self.batch_size = 32
+
+        # transform = transforms.Compose([transforms.ToTensor(),
+        #                         transforms.Normalize((0.1307,), (0.3081,)),
+        #                         ])
+
+        data_set = datasets.MNIST('/datasets/mnist', download=True, train=True) # transform=transform
+        lengths = [int(len(data_set)*0.8), int(len(data_set)*0.2)]
+        train_set, val_set = random_split(train_set, lengths)
+
+        if train:
+            return DataLoader(dataset=train_set, batch_size=self.batch_size, shuffle=True)
+        else:
+            return DataLoader(dataset=val_set, batch_size=self.batch_size, shuffle=True)
+
+class MNISTClass(MNISTTask):
+    def loss_fn(self):
+        return torch.nn.CrossEntropyLoss()
+
+class MNISTDenoising(MNISTTask):
+    def loss_fn(self):
+        return torch.nn.MSELoss()
+
 if __name__ == "__main__":
     print("[*] Testing FashionMnist")
     fashion_mnist_denoise = FashionMnistDenoising()
@@ -152,5 +183,11 @@ if __name__ == "__main__":
     print("[*] Testing ImageNet")
     inet_denoising = ImageNetDenoising()
     loader = inet_denoising.loader(train=True, batch_size=32)
+    for images, labels in loader:
+        print(images.shape, labels.shape)
+    
+    print("[*] Testing MNIST")
+    mnist_denoising = MNISTDenoising()
+    loader = mnist_denoising.loader(train=True, batch_size=32)
     for images, labels in loader:
         print(images.shape, labels.shape)
