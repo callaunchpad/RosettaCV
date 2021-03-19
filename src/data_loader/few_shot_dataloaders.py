@@ -20,7 +20,15 @@ class SubSampledDataset(Dataset):
         return len(self.indices)
 
     def __getitem__(self, index):
-        return self.base_dataset[self.indices[index]]
+        data_point = self.base_dataset[self.indices[index]]
+
+        if type(data_point) == tuple:
+            return {
+                'input': data_point[0],
+                'label': data_point[-1]
+            }
+
+        return data_point
 
 
 def get_few_shot_dataloader(dataset: Dataset, indices_file: str = None, sample_size: float = 0.01,
