@@ -23,7 +23,7 @@ class SubSampledDataset(Dataset):
         return self.base_dataset[self.indices[index]]
 
 
-def get_few_shot_dataloader(dataset: Dataset, indices_file: str = None, sample_size: float = 0.1,
+def get_few_shot_dataloader(dataset: Dataset, indices_file: str = None, sample_size: float = 0.01,
                             batch_size: int = 32, by_class: bool = True) -> DataLoader:
     """
     Takes in a dataset (and possibly a file specifying a list of indices)
@@ -45,7 +45,7 @@ def get_few_shot_dataloader(dataset: Dataset, indices_file: str = None, sample_s
     else:
         # Sample indices and save to data folder
         indices = sample_indices(dataset, sample_size, by_class=by_class)
-        np.save(f"{data_io.get_data_path()}/{str(dataset)}", indices)
+        np.save(f"{data_io.get_data_path()}/subsampled_data_{sample_size}", indices)
 
     # Return a dataloader
     return DataLoader(SubSampledDataset(dataset, indices), batch_size=batch_size, shuffle=True)
