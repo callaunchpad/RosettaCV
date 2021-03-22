@@ -101,8 +101,12 @@ class OmniglotByAlphabet:
             :param task_folder: The folder to pull the alphabet from
             :param output_width: The max number of classes to use
             """
+            transforms = torchvision.transforms.Compose([
+                torchvision.transforms.ToTensor()
+            ])
+
             if output_width is None:
-                self.dataset = torchvision.datasets.ImageFolder(task_folder)
+                self.dataset = torchvision.datasets.ImageFolder(task_folder, transform=transforms)
                 return
 
             # If we specify a number of classes, use the first n classes
@@ -111,11 +115,12 @@ class OmniglotByAlphabet:
             def valid_file(file_path: str) -> bool:
                 path = Path(file_path)
 
-                return str(path.parent.absolute()) in first_n
+                return f"{str(path.parent.absolute())}/" in first_n
 
             # Create a dataset that only selects from the first n characters
             self.dataset = torchvision.datasets.ImageFolder(task_folder,
-                                                            is_valid_file=valid_file)
+                                                            is_valid_file=valid_file,
+                                                            transform=transforms)
 
         def loader(self, batch_size: int = 32, **kwargs):
             return torch.utils.data.DataLoader(self.dataset, batch_size=batch_size, **kwargs, shuffle=True)
@@ -268,3 +273,7 @@ class MNISTClass(MNISTTask):
 class MNISTDenoising(MNISTTask):
     def loss_fn(self):
         return torch.nn.MSELoss()
+
+
+if __name__ == "__main__":
+    og = OmniglotByAlphabet(characters_per_alphabet=10, force_constant_size=True)
