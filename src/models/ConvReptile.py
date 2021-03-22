@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from Reptile import ReptileModel
 
-class Net(ReptileModel):
+class ConvReptile(ReptileModel):
 	def __init__(self):
 		super(Net, self).__init__()
 		# Create 3 layers of CNN
