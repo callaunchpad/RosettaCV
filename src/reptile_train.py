@@ -4,23 +4,19 @@ import argparse
 import torch
 import torchvision.models as models
 
-from trainer.meta_trainer import outer_train_loop, inner_train_loop
-
+from trainer.meta_trainer import meta_outer_train_loop, reptile_inner_train_loop, reptile_update_params
+from data_loader.data_loaders import MNISTClass
 
 def train_reptile(args):
     model = models.resnet18(pretrained=False)
     optimizer = torch.optim.SGD(model.parameters(), lr=args.inner_lr)
-    train_tasks = []
+    train_tasks = [MNISTClass()]
     validation_tasks = []
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    def reptile_update_params(model, init_params, new_params, total_loss, **kwargs):
-        return args.outer_lr * (init_params - new_params)
-
-    outer_train_loop(model, optimizer, train_tasks, validation_tasks, args.batch_size, args.num_iters_inner,
-                     args.num_iters_outer, inner_train_loop, reptile_update_params, device, args.save_name)
-
+    meta_outer_train_loop(model, optimizer, train_tasks, validation_tasks, args.batch_size, args.num_iters_inner,
+                     args.num_iters_outer, reptile_inner_train_loop, reptile_update_params, device, args.save_name)
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
