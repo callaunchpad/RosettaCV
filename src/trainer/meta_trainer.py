@@ -10,10 +10,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import wandb
 import typing
+import time
 
-from torch.utils.data import DataLoader
-from train.train_callbacks import register_save_best_validation_loss
-
+def maml_inner_train(model, optimizer, data_loaders, loss_fn, device, num_iters):
+    return None
 
 def inner_train_loop(model, optimizer, data_loaders, loss_fn, device, num_iters):
     """Inner training loop for meta training procedure.
@@ -47,28 +47,23 @@ def inner_train_loop(model, optimizer, data_loaders, loss_fn, device, num_iters)
                 loss.backward()
                 optimizer.step()
 
-            # statistics
-            wandb.log({'inner_loss': loss})
-            print("Loss ", loss)
-
             total_loss += loss
             iters += 1
 
     return model, total_loss
 
-def maml_inner_train(model, optimizer, data_loaders, loss_fn, device, num_iters):
-    return None
-
-def outer_train_loop(model, optimizer, train_tasks,
+def outer_train_loop(model, optimizer, train_tasks, 
+                     validation_tasks, batch_size,
                      num_iters_inner, num_iters_outer,
                      update_parameters_inner, update_parameters,
-                     device, update_param_kwargs=None):
+                     device, save_to, update_param_kwargs=None):
     """Meta train a model
 
     Args:
         model (nn.Module): Initialized model to meta-train.
         optimizer (torch.optim): Optimizer to train inner loop.
         train_tasks (arr): Array of Task objects. 
+        validation_tasks (arr): Array of Task objects for validation.
         batch_size (int): batch size for data loaders.
         num_iters_inner (int): Number of training iterations in the inner loop. 
                                One step = one parameter update in the inner loop.
@@ -76,6 +71,7 @@ def outer_train_loop(model, optimizer, train_tasks,
         update_parameters_inner: Function for the inner update step. MAML requires a different inner training loop
         update_parameters (function): Function to update the init params. This should take in fn(model, init_params, new_params)
         device (torch.device): Device to train on. 
+        save_to (str): Name of save file. Will save model with best validation accuracy.
 
     Returns:
         nn.parameter: Final initialization parameters.
@@ -84,6 +80,7 @@ def outer_train_loop(model, optimizer, train_tasks,
 
     init_params = model.state_dict()
     iters = 0
+    min_val_loss = 10000
 
     all_data_loaders = []
     loss_fns = []
@@ -94,6 +91,7 @@ def outer_train_loop(model, optimizer, train_tasks,
 
     while iters < num_iters_outer:
         delta_params = init_params
+        avg_total_loss = 0
         for data_loaders, loss_fn in zip(all_data_loaders, loss_fns):
             if iters > num_iters_outer:
                 break
@@ -104,6 +102,8 @@ def outer_train_loop(model, optimizer, train_tasks,
             new_model, total_loss = update_parameters_inner(model, optimizer, 
                                          data_loaders, loss_fn, 
                                          device, num_iters_inner)
+            avg_total_loss += total_loss
+            wandb.log({'per_task_loss': total_loss})
             
             new_params = new_model.state_dict()
 
@@ -112,8 +112,25 @@ def outer_train_loop(model, optimizer, train_tasks,
             iters += 1
 
         init_params = delta_params
+        avg_total_loss /= len(all_data_loaders)
+        wandb.log({'average_loss_over_tasks': avg_total_loss})
 
+        # Start of validation tasks
+        model.load_state_dict(init_params)
+        with torch.no_grad():
+            val_loss = 0
+            for data_loaders, loss_fn in zip(val_data_loaders, val_loss_fns):
+                val_loss += util.get_loss_on_dataloader(model, data_loaders, loss_fn)
 
+        val_loss /= len(val_data_loaders)
+        print(f"Average Validation Loss: {val_loss}")
+        self.wandb_run.log({"Validation Loss": val_loss})
+
+        if val_loss < min_val_loss:
+            print(f"Validation loss of {val_loss} better than previous best of {min_val_loss}")
+            print(f"Saving model...")
+            model_io.save_model_checkpoint(save_to, model)
+            min_val_loss = val_loss
 
     time_elapsed = time.time() - since
     print('Training complete in {:.0f}m {:.0f}s'.format(
