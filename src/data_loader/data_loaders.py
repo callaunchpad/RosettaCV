@@ -141,7 +141,7 @@ class FashionMnistDenoising(FashionMnistTask):
     def loss_fn(self):
         return torch.nn.MSELoss()
 
-class MNISTTask():
+class MNISTTask(Task):
     def loader(self, train: bool, **kwargs):
         """
         train: true for train dataset loader, false for validation dataset loader
@@ -152,9 +152,9 @@ class MNISTTask():
         else:
             self.batch_size = 32
 
-        # transform = transforms.Compose([transforms.ToTensor(),
-        #                         transforms.Normalize((0.1307,), (0.3081,)),
-        #                         ])
+        transform = transforms.Compose([transforms.ToTensor(),
+                                transforms.Normalize((0.1307,), (0.3081,)),
+                                ])
 
         data_set = datasets.MNIST('/datasets/mnist', download=True, train=True) # transform=transform
         lengths = [int(len(data_set)*0.8), int(len(data_set)*0.2)]
