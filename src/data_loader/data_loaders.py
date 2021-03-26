@@ -182,6 +182,12 @@ class OmniglotByAlphabet:
             return [OmniglotByAlphabet.OmniglotAlphabetTask(folder, characters_per_alphabet) for folder in task_folders]
         return [OmniglotByAlphabet.OmniglotAlphabetTask(folder) for folder in task_folders]
 
+    def get_train_tasks(self) -> List[Task]:
+        return self.train_tasks
+
+    def get_vaidation_tasks(self) -> List[Task]:
+        return self.validation_tasks
+
 class OmniglotDenoising(OmniglotTask):
     def loss_fn(self):
         return torch.nn.MSELoss()
