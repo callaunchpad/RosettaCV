@@ -185,7 +185,7 @@ class OmniglotByAlphabet:
     def get_train_tasks(self) -> List[Task]:
         return self.train_tasks
 
-    def get_vaidation_tasks(self) -> List[Task]:
+    def get_validation_tasks(self) -> List[Task]:
         return self.validation_tasks
 
 class OmniglotDenoising(OmniglotTask):

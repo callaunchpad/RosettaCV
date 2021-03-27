@@ -5,13 +5,14 @@ import torch
 import torchvision.models as models
 
 from trainer.meta_trainer import meta_outer_train_loop, reptile_inner_train_loop, reptile_update_params
-from data_loader.data_loaders import OmniglotFewShot
+from data_loader.data_loaders import OmniglotByAlphabet
 
 def train_reptile(args):
     model = models.resnet18(pretrained=False)
     optimizer = torch.optim.SGD(model.parameters(), lr=args.inner_lr)
-    train_tasks = [OmniglotFewShot() for i in range(100)]
-    validation_tasks = [OmniglotFewShot() for i in range(20)]
+    loader = OmniglotByAlphabet()
+    train_tasks = loader.get_train_tasks()
+    validation_tasks = loader.get_validation_tasks()
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

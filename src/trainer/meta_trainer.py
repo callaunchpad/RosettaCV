@@ -12,6 +12,9 @@ import numpy as np
 import wandb
 import typing
 import time
+import utils.util as util
+import utils.model_io as model_io
+import tensorboard
 
 def maml_inner_train(model, optimizer, data_loaders, loss_fn, device, num_iters):
     return None
@@ -123,13 +126,14 @@ def reptile_inner_train_loop(model, optimizer, data_loaders, loss_fn, device, nu
         num_iters (int): number of iterations to train on
     """
     iters = 0
+    total_loss = 0
+    model.to(device)
     while iters < num_iters:
         for sample in data_loaders['train']:
-            if iters < num_iters:
+            if iters > num_iters:
                 break
-
-            inputs = sample['input']
-            labels = sample['output']
+            inputs = sample[0]
+            labels = sample[1]
 
             inputs = inputs.to(device)
             labels = labels.to(device)
@@ -137,7 +141,7 @@ def reptile_inner_train_loop(model, optimizer, data_loaders, loss_fn, device, nu
             # zero the parameter gradients
             optimizer.zero_grad()
 
-            with torch.set_grad_enabled(phase == 'train'):
+            with torch.set_grad_enabled(True):
                 preds = model(inputs)
                 loss = loss_fn(preds, labels)
                 loss.backward()
@@ -173,6 +177,9 @@ def reptile_update_params(model, init_params, new_weights):
         for name in new_weights[i]:
             fweights[name] += new_weights[i][name]/float(ws)
 
+    # temporarily defining meta_lr
+    meta_lr = 0.2
+
     # do reptile step
     updated_meta_weights = {name : 
         init_params[name] + ((fweights[name] - init_params[name]) * meta_lr) for name in init_params}
@@ -207,11 +214,14 @@ def meta_outer_train_loop(model, optimizer, train_tasks,
     iters = 0
     min_val_loss = 10000
 
+    model.to(device)
+
     # Turn tasks into data loaders + loss fns
     all_data_loaders = []
     loss_fns = []
-    for task in train_tasks:
-        dataloaders = {"train": task.loader("train", batch_size=batch_size), "val": task.loader("val")}
+    for task, validation in zip(train_tasks, validation_tasks):
+        # dataloaders = {"train": task.loader("train"), "val": task.loader("val")}
+        dataloaders = {"train": task.loader(batch_size=batch_size), "val": validation.loader()}
         all_data_loaders.append(dataloaders)
         loss_fns.append(task.loss_fn())
 
@@ -237,10 +247,10 @@ def meta_outer_train_loop(model, optimizer, train_tasks,
             # re-load initial params/meta weights
             model.load_state_dict({name: init_params[name] for name in init_params})
 
-            iters += 1
+            iters += 1 
 
         # Update initial parameters using update_parameters function
-        init_params = update_parameters(model, init_params, new_weights, total_loss, update_param_kwargs)
+        init_params = update_parameters(model, init_params, new_weights)
 
         avg_total_loss /= len(all_data_loaders)
         wandb.log({'average_loss_over_tasks': avg_total_loss})
@@ -249,11 +259,13 @@ def meta_outer_train_loop(model, optimizer, train_tasks,
         model.load_state_dict({ name: init_params[name] for name in init_params})
         with torch.no_grad():
             val_loss = 0
-            for data_loaders, loss_fn in zip(val_data_loaders, val_loss_fns):
-                val_loss += util.get_meta_loss_on_dataloader(model, data_loaders, loss_fn, num_iters_inner)
+            for validation_task in validation_tasks:
+                data_loaders = validation_task.loader()
+                loss_fn = validation_task.loss_fn()
+                val_loss += util.get_loss_on_dataloader(model, data_loaders, loss_fn)
 
-        val_loss /= len(val_data_loaders)
-        self.wandb_run.log({"Validation Loss": val_loss})
+        val_loss /= len(validation_tasks)
+        wandb.log({"Validation Loss": val_loss})
 
         # Save model if better
         if val_loss < min_val_loss:
