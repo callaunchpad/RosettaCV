@@ -1,13 +1,17 @@
 import os
-import gzip
+import glob
 import numpy as np
-
 import torch
-import torch.nn as nn
 import torchvision
+
+import utils.data_io as data_io
+
+from pathlib import Path
 from torchvision import datasets, transforms
 from torchvision.datasets import ImageFolder
 from torch.utils.data import Dataset, DataLoader, random_split
+from data_loader.few_shot_dataloaders import get_few_shot_dataloader
+from typing import List
 
 class Task:
     
@@ -77,6 +81,113 @@ class OmniglotClass(OmniglotTask):
     def loss_fn(self):
         return torch.nn.CrossEntropyLoss()
 
+class OmniglotFewShot(OmniglotClass):
+    # Override the loader function to incorporate get_few_shot_dataloader.
+    def loader(self, train: bool, **kwargs):
+        """
+        train: true if for train dataset, false if for test dataset
+        """
+        if 'batch_size' in kwargs:
+            self.batch_size = kwargs.pop('batch_size')
+        else:
+            self.batch_size = 32
+
+        raw_data = torchvision.datasets.Omniglot(
+            root="./datasets", background=train, download=True, transform=torchvision.transforms.ToTensor()
+        )
+        print(len(raw_data))
+
+        dataloader = get_few_shot_dataloader(raw_data, batch_size=self.batch_size, by_class=True)
+
+        return dataloader
+
+
+class OmniglotByAlphabet:
+    class OmniglotAlphabetTask(Task):
+        def __init__(self, task_folder: str, output_width: int = None):
+            """
+            Initializes the task
+            :param task_folder: The folder to pull the alphabet from
+            :param output_width: The max number of classes to use
+            """
+            transforms = torchvision.transforms.Compose([
+                torchvision.transforms.ToTensor()
+            ])
+
+            if output_width is None:
+                self.dataset = torchvision.datasets.ImageFolder(task_folder, transform=transforms)
+                return
+
+            # If we specify a number of classes, use the first n classes
+            first_n = set(glob.glob(f"{task_folder}/*/")[:output_width])
+
+            def valid_file(file_path: str) -> bool:
+                path = Path(file_path)
+
+                return f"{str(path.parent.absolute())}/" in first_n
+
+            # Create a dataset that only selects from the first n characters
+            self.dataset = torchvision.datasets.ImageFolder(task_folder,
+                                                            is_valid_file=valid_file,
+                                                            transform=transforms)
+
+        def loader(self, batch_size: int = 32, **kwargs):
+            return torch.utils.data.DataLoader(self.dataset, batch_size=batch_size, **kwargs, shuffle=True)
+
+        def loss_fn(self):
+            return torch.nn.CrossEntropyLoss()
+
+    def __init__(self, num_train_alphabets: int = 20, num_validation_alphabets: int = 10,
+                    characters_per_alphabet: int = None, force_constant_size: bool = False):
+        """
+        Creates a class that wraps a list of tasks by sampling alphabets from the omniglot dataset
+        :param num_train_alphabets: The number of training alphabets to sample as tasks
+        :param num_validation_alphabets: The number of validation alphabets to sample as tasks
+        :param characters_per_alphabet: The number of characters to take per alphabet, if None, take them all
+        :param force_constant_size: Whether or not to force the alphabets to all have the same size by subsampling
+        set to min(characters_per_alphabet, 14) because 14 is the minimum characters in an alphabet
+        """
+        assert num_train_alphabets <= 30, "Only 30 alphabets available for Omniglot train"
+        assert num_validation_alphabets <= 20, "Only 20 validation alphabets available for Omniglot"
+        assert not force_constant_size or characters_per_alphabet <= 14, "If forcing all alphabets to the same size" \
+                                                                         "you must make that size <characters_per_alphabet>" \
+                                                                         "less than or equal to 14"
+
+        # Download the dataset if necessary
+        torchvision.datasets.Omniglot(root=f"{data_io.get_data_path()}", download=True, background=True)  # Train
+        torchvision.datasets.Omniglot(root=f"{data_io.get_data_path()}", download=True, background=False)  # Validation
+
+        # List of possible train tasks
+        omniglot_path = f"{data_io.get_data_path()}/omniglot-py"
+        available_train_alphabets = glob.glob(f"{omniglot_path}/images_background/*/")
+        available_validation_alphabets = glob.glob(f"{omniglot_path}/images_evaluation/*/")
+
+        # Randomly choose train and validation alphabets
+        train_alphabets = np.random.choice(available_train_alphabets, size=num_train_alphabets).tolist()
+        validation_alphabets = np.random.choice(available_validation_alphabets, size=num_validation_alphabets).tolist()
+
+        self.train_tasks = self.get_tasks(train_alphabets, force_constant_size, characters_per_alphabet)
+        self.validation_tasks = self.get_tasks(validation_alphabets, force_constant_size, characters_per_alphabet)
+
+    def get_tasks(self, task_folders: List[str], constant_size: bool = False,
+                  characters_per_alphabet: int = None) -> List[Task]:
+        """
+        Turns lists of directories into lists of abstract tasks
+        :param task_folders: The folder from which to make the task
+        :param constant_size: Whether or not to force the tasks to have constant output size
+        :param characters_per_alphabet: The size to force all the takss to output, see above
+        :return: A list of tasks built from the folder
+        """
+        if constant_size:
+            return [OmniglotByAlphabet.OmniglotAlphabetTask(folder, characters_per_alphabet) for folder in task_folders]
+        return [OmniglotByAlphabet.OmniglotAlphabetTask(folder) for folder in task_folders]
+
+    def get_train_tasks(self) -> List[Task]:
+        return self.train_tasks
+
+    def get_validation_tasks(self) -> List[Task]:
+        return self.validation_tasks
+
 class OmniglotDenoising(OmniglotTask):
     def loss_fn(self):
         return torch.nn.MSELoss()
@@ -141,7 +252,7 @@ class FashionMnistDenoising(FashionMnistTask):
     def loss_fn(self):
         return torch.nn.MSELoss()
 
-class MNISTTask():
+class MNISTTask(Task):
     def loader(self, train: bool, **kwargs):
         """
         train: true for train dataset loader, false for validation dataset loader
@@ -152,13 +263,13 @@ class MNISTTask():
         else:
             self.batch_size = 32
 
-        # transform = transforms.Compose([transforms.ToTensor(),
-        #                         transforms.Normalize((0.1307,), (0.3081,)),
-        #                         ])
+        transform = transforms.Compose([transforms.ToTensor(),
+                                transforms.Normalize((0.1307,), (0.3081,)),
+                                ])
 
         data_set = datasets.MNIST('/datasets/mnist', download=True, train=True) # transform=transform
         lengths = [int(len(data_set)*0.8), int(len(data_set)*0.2)]
-        train_set, val_set = random_split(train_set, lengths)
+        train_set, val_set = random_split(data_set, lengths)
 
         if train:
             return DataLoader(dataset=train_set, batch_size=self.batch_size, shuffle=True)

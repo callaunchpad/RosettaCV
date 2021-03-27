@@ -22,8 +22,8 @@ def get_loss_on_dataloader(model: nn.Module, data_loader: DataLoader, loss_fn: C
     total_loss = 0
 
     for batch in data_loader:
-        inputs = batch['input'].to(device)
-        labels = batch['label'].to(device)
+        inputs = batch[0].to(device)
+        labels = batch[1].to(device)
 
         predictions = model(inputs)
 
