@@ -103,6 +103,45 @@ class OmniglotFewShot(OmniglotClass):
 
 
 class OmniglotByAlphabet:
+    class LabelCorrectingDataset(Dataset):
+        """
+        This dataset corrects labels to be 0 indexed and continuous if we are
+        using imagefolder with a valid_file mask
+        """
+
+        def __init__(self, base_dataset: Dataset):
+            """
+            Sets up the dataset
+            :param base_dataset: The base dataset to wrap
+            """
+            self.dataset = base_dataset
+
+            # Construct the new label map
+            labels = set()
+            for _, label in self.dataset:
+                labels.add(label)
+
+            labels = list(labels)
+            labels.sort()
+
+            self.label_map = {}
+            for i in range(len(labels)):
+                self.label_map[labels[i]] = i
+
+        def __len__(self):
+            return len(self.dataset)
+
+        def __getitem__(self, index):
+            """
+            Gets the nth item of the dataset and rearranges the labels
+            :param index: The index to get
+            :return: The nth item of the datset
+            """
+            img, label = self.dataset[index]
+            label = type(label)(self.label_map[int(label)])
+
+            return img, label
+
     class OmniglotAlphabetTask(Task):
         def __init__(self, task_folder: str, output_width: int = None):
             """
@@ -127,9 +166,9 @@ class OmniglotByAlphabet:
                 return f"{str(path.parent.absolute())}/" in first_n
 
             # Create a dataset that only selects from the first n characters
-            self.dataset = torchvision.datasets.ImageFolder(task_folder,
-                                                            is_valid_file=valid_file,
-                                                            transform=transforms)
+            self.dataset = OmniglotByAlphabet.LabelCorrectingDataset(torchvision.datasets.ImageFolder(task_folder,
+                                                                                                      is_valid_file=valid_file,
+                                                                                                      transform=transforms))
 
         def loader(self, batch_size: int = 32, **kwargs):
             return torch.utils.data.DataLoader(self.dataset, batch_size=batch_size, **kwargs, shuffle=True)
@@ -138,7 +177,7 @@ class OmniglotByAlphabet:
             return torch.nn.CrossEntropyLoss()
 
     def __init__(self, num_train_alphabets: int = 20, num_validation_alphabets: int = 10,
-                    characters_per_alphabet: int = None, force_constant_size: bool = False):
+                 characters_per_alphabet: int = None, force_constant_size: bool = False):
         """
         Creates a class that wraps a list of tasks by sampling alphabets from the omniglot dataset
         :param num_train_alphabets: The number of training alphabets to sample as tasks
@@ -188,9 +227,11 @@ class OmniglotByAlphabet:
     def get_validation_tasks(self) -> List[Task]:
         return self.validation_tasks
 
+
 class OmniglotDenoising(OmniglotTask):
     def loss_fn(self):
         return torch.nn.MSELoss()
+
 
 class FashionMnistDataset(Dataset):
     # available on latte but if not, download from https://github.com/zalandoresearch/fashion-mnist and gunzip
