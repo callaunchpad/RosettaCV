@@ -215,6 +215,7 @@ def meta_outer_train_loop(model, optimizer, train_tasks,
     min_val_loss = 10000
 
     model.to(device)
+    print(device)
 
     # Turn tasks into data loaders + loss fns
     all_data_loaders = []
@@ -243,6 +244,10 @@ def meta_outer_train_loop(model, optimizer, train_tasks,
             
             # save a copy of fast weights/new weights
             new_weights.append(deepcopy(model.state_dict()))
+
+            # compute accuracy
+            accuracy = util.get_accuracy_on_dataloader(model, data_loaders["val"])
+            wandb.log({'per_task_accuracy': accuracy})
             
             # re-load initial params/meta weights
             model.load_state_dict({name: init_params[name] for name in init_params})

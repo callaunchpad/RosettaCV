@@ -3,14 +3,21 @@ import argparse
 
 import torch
 import torchvision.models as models
+import torch.nn as nn
 
 from trainer.meta_trainer import meta_outer_train_loop, reptile_inner_train_loop, reptile_update_params
 from data_loader.data_loaders import OmniglotByAlphabet
 
+def change_resnet_labels(num_labels):
+    model_ft = models.resnet18(pretrained=False)
+    num_features = model_ft.fc.in_features
+    model_ft.fc = nn.Linear(num_features, num_labels)
+    return model_ft
+
 def train_reptile(args):
-    model = models.resnet18(pretrained=False)
+    model = change_resnet_labels(14)
     optimizer = torch.optim.SGD(model.parameters(), lr=args.inner_lr)
-    loader = OmniglotByAlphabet()
+    loader = OmniglotByAlphabet(characters_per_alphabet=14, force_constant_size=True)
     train_tasks = loader.get_train_tasks()
     validation_tasks = loader.get_validation_tasks()
     
