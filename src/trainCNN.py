@@ -4,7 +4,7 @@ from torchvision.datasets import ImageFolder
 
 from models.CNN import CNN
 from trainer.trainer import Trainer
-import data_loader.few_shot_dataloaders
+from data_loader.few_shot_dataloaders import get_few_shot_dataloader
 
 transform = transforms.Compose([
         transforms.Resize(256),
