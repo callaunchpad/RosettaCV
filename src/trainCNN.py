@@ -15,7 +15,7 @@ train_set = ImageFolder('/datasets/imagenetwhole/ilsvrc2012/train/', transform=s
 val_set = ImageFolder('/datasets/imagenetwhole/ilsvrc2012/val/', transform=self.transform)
 
 model = CNN()
-loss = nn.MSELoss()
+loss = nn.CrossEntropyLoss()
 train_loader = SubSampledDataset.get_few_shot_dataloader(train_set)
 val_loader = SubSampledDataset.get_few_shot_dataloader(val_set)
 

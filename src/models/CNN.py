@@ -17,6 +17,7 @@ class CNN(nn.Module):
             nn.MaxPool2d(kernel_size=2, stride=2))
         self.drop_out = nn.Dropout()
         self.fc1 = nn.Linear(7 * 7 * 64, 1000)
+        self.r1 = nn.ReLU()
         self.fc2 = nn.Linear(1000, 10)
     
     def forward(self, x):
@@ -25,5 +26,6 @@ class CNN(nn.Module):
         out = out.reshape(out.size(0), -1)
         out = self.drop_out(out)
         out = self.fc1(out)
+        out = self.r1(out)
         out = self.fc2(out)
         return out
