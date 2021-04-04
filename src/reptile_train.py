@@ -5,8 +5,6 @@ import torch
 import torchvision.models as models
 import torch.nn as nn
 
-from models.OmniglotModel import OmniglotModel
-
 from trainer.meta_trainer import meta_outer_train_loop, reptile_inner_train_loop, reptile_update_params
 from data_loader.data_loaders import OmniglotByAlphabet
 
