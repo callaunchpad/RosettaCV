@@ -1,14 +1,19 @@
 import torch
 import torch.nn as nn
+from torchvision import transforms
 import wandb
 from datetime import datetime
 
+import matplotlib.pyplot as plt
+
 from models.DenoisingAE import EncoderSm, DecoderSm, EncoderMd, DecoderMd, EncoderLg, DecoderLg, DenoisingAE
-from data_loader.data_loaders import FashionMnistDenoising
+from data_loader.data_loaders import FashionMnistDenoising, ImageNetDenoising
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-def train(model, model_size, num_epochs=10, batch_size=32, learning_rate=1e-3, random_noise=0.15, save_model=False):
+print('[*] Training on ' + device)
+
+def train(model, model_size, dataset, num_epochs=10, batch_size=32, learning_rate=1e-3, random_noise=0.15, save_model=False):
     # setup wandb config
     config = wandb.config
     config.num_epochs = num_epochs
@@ -18,25 +23,57 @@ def train(model, model_size, num_epochs=10, batch_size=32, learning_rate=1e-3, r
     config.model_size = model_size
 
     # begin training
-    print("[*] Training DenoisingAE on FashionMNIST")
-    fashion_mnist_denoise = FashionMnistDenoising()
     torch.manual_seed(7)
-    criterion = fashion_mnist_denoise.loss_fn()
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-5)
-    train_dl = fashion_mnist_denoise.loader(True, batch_size=32)
+    if dataset == 'fashion_mnist':
+        print('[*] Training DenoisingAE on FashionMNIST')
+        fashion_mnist_denoise = FashionMnistDenoising()
+        criterion = fashion_mnist_denoise.loss_fn()
+        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-5)
+        train_dl = fashion_mnist_denoise.loader(True, batch_size=32)
+    elif dataset == 'imagenet':
+        print('[*] Training DenoisingAE on ImageNet')
+        imagenet_dnoise = ImageNetDenoising()
+        imagenet_dnoise.transform = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.Grayscale(),
+            transforms.ToTensor()
+        ])
+        criterion = imagenet_dnoise.loss_fn()
+        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-5)
+        train_dl = imagenet_dnoise.loader(True, batch_size=32)
 
+    global_step = 0
     for epoch in range(num_epochs):
+        batch_num = 0
+        total_batches = len(train_dl)
         for img, _ in train_dl:
             img = img.to(device)
             img = img / 255
-            img = img.view(-1, 28, 28)
+
+            '''display test image
+            plt.imshow(img[0][0].cpu())
+            plt.show()
+            '''
+
+            if dataset == 'fashion_mnist':
+                img = img.view(-1, 28, 28) # convert to minibatches of 1
+            elif dataset == 'imagenet':
+                img = img.view(-1, 224, 224) # convert to minibatches of 1
 
             noisy_imgs = []
             for i in range(img.shape[0]):
-                noisy_mask = torch.FloatTensor(28, 28).to(device).uniform_() > random_noise
+                if dataset == 'fashion_mnist':
+                    noisy_mask = torch.FloatTensor(28, 28).to(device).uniform_() > random_noise
+                elif dataset == 'imagenet':
+                    noisy_mask = torch.FloatTensor(224, 224).to(device).uniform_() > random_noise
+                
                 noisy_imgs.append(img[i] * noisy_mask)
             noisy_imgs = torch.stack(noisy_imgs)
-            noisy_imgs = noisy_imgs.unsqueeze(1).to(device)
+            if dataset == 'fashion_mnist':
+                noisy_imgs = noisy_imgs.view(-1, 1, 28, 28).to(device)
+            elif dataset == 'imagenet':
+                noisy_imgs = noisy_imgs.view(-1, 1, 224, 224).to(device)
 
             out = model(noisy_imgs)
             img = img.unsqueeze(1)
@@ -45,14 +82,20 @@ def train(model, model_size, num_epochs=10, batch_size=32, learning_rate=1e-3, r
             optimizer.step()
             optimizer.zero_grad()
 
-        wandb.log({ "epoch": epoch + 1, "loss": float(loss) })
+            global_step += 1
+            batch_num += 1
+            if global_step % 100 == 0:
+                print('Epoch:{} Batch:{}/{} Loss:{:.4f}'.format(epoch+1, batch_num, total_batches, float(loss)))
+                wandb.log({ 'batch_loss': float(loss) })
+
+        wandb.log({ 'epoch': epoch + 1, 'loss': float(loss) })
         print('Epoch:{} Loss:{:.4f}'.format(epoch+1, float(loss)))
     
     if save_model:
-        torch.save(model.state_dict(), 'trained_models/denoisingae_' + model_size + '/denoisingae-' + datetime.now().strftime('%m-%d') + '-' + str(random_noise) + '.pt')
+        torch.save(model.state_dict(), 'trained_models/' + dataset + '/denoisingae_' + model_size + '/denoisingae-' + datetime.now().strftime('%m-%d') + '-' + str(random_noise) + '.pt')
 
 #r_noise = [0.10, 0.15, 0.20, 0.30, 0.40]
-r_noise = [0.30]
+r_noise = [0.40]
 model_size = 'sm' # sm, md, or lg
 
 for noise_amt in r_noise:
@@ -67,7 +110,8 @@ for noise_amt in r_noise:
         decoder = DecoderLg().to(device)
 
     model = DenoisingAE(encoder, decoder).to(device)
+    model = nn.DataParallel(model, device_ids=[0, 1])
 
     with wandb.init(project="DenoisingAE"):
-        train(model, model_size, random_noise=noise_amt, save_model=True)
+        train(model, model_size, 'imagenet', num_epochs=5, random_noise=noise_amt, save_model=True)
         #wandb.alert(title="Train DenoisingAE", text="Finished training")
