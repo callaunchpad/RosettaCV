@@ -264,12 +264,27 @@ def meta_outer_train_loop(model, optimizer, train_tasks,
         model.load_state_dict({ name: init_params[name] for name in init_params})
         with torch.no_grad():
             val_loss = 0
+            task_count = 0
+            avg_accuracy = 0
             for validation_task in validation_tasks:
-                data_loaders = validation_task.loader()
+                # Get data loaders and loss function
+                data_loaders = {"train": validation_task.loader()} # Temp fix.. else API cries
                 loss_fn = validation_task.loss_fn()
-                val_loss += util.get_loss_on_dataloader(model, data_loaders, loss_fn)
+
+                # Train for 32 steps, and get the validation loss from here
+                val_loss += update_parameters_inner(model, optimizer, 
+                                                data_loaders, loss_fn, 
+                                                device, num_iters_inner)
+
+                # Also compute accuracy
+                avg_accuracy += util.get_accuracy_on_dataloader(model, data_loaders["train"])
+
+                # Re-load the model for next iteration of loop
+                model.load_state_dict({ name: init_params[name] for name in init_params})
 
         val_loss /= len(validation_tasks)
+        avg_accuracy /= len(validation_tasks)
+        wandb.log({"Average accuracy": avg_accuracy})
         wandb.log({"Validation Loss": val_loss})
 
         # Save model if better

@@ -48,7 +48,6 @@ def get_accuracy_on_dataloader(model: nn.Module, data_loader: DataLoader) -> tor
         labels = batch[1].to(device)
 
         predictions = model(inputs)
-        print(predictions.size())
         _, idxs = torch.max(predictions, dim=1)
         total_items += len(idxs)
         for i in range(len(idxs)):

@@ -5,6 +5,8 @@ import torch
 import torchvision.models as models
 import torch.nn as nn
 
+from models.OmniglotModel import OmniglotModel
+
 from trainer.meta_trainer import meta_outer_train_loop, reptile_inner_train_loop, reptile_update_params
 from data_loader.data_loaders import OmniglotByAlphabet
 
@@ -29,7 +31,7 @@ def train_reptile(args):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument('-in', '--num_iters_inner', default=32)
-    ap.add_argument('-out', '--num_iters_outer', default=1000)
+    ap.add_argument('-out', '--num_iters_outer', default=100000)
     ap.add_argument('-ilr', '--inner_lr', default=1e-3)
     ap.add_argument('-olr', '--outer_lr', default=0.2)
     ap.add_argument('--batch_size', default=10)
