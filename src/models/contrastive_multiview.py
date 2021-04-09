@@ -6,11 +6,12 @@ import itertools
 import random
 
 import torch.nn as nn
+import utils.model_io as model_io
 
 from typing import TypeVar, List, Callable
 from trainer.trainer import Trainer
 from collections import deque
-from losses.cmc_losses import get_cmc_loss_on_dataloader, contrastive_loss
+from losses.cmc_losses import get_cmc_loss_on_dataloader, get_positive_and_negative_samples
 
 T = TypeVar("T")
 
@@ -172,10 +173,10 @@ class CMCTrainer(Trainer):
                 # Forward pass
                 encodings = self.model(inputs)
 
-                # TODO: Implement loss computation
+                core_view, positive_samples, negative_samples = get_positive_and_negative_samples(encodings, self.model)
+                loss_value = self.loss_function(core_view, positive_samples, negative_samples)
 
                 # Backward pass
-                loss_value = self.loss_function()
                 loss_value.backward()
                 self.wandb_run.log({"Train Loss": loss_value})
 
@@ -188,7 +189,7 @@ class CMCTrainer(Trainer):
 
             # Compute validation loss
             with torch.no_grad():
-                val_loss = util.get_loss_on_dataloader(self.model, self.validation_data, self.loss_function)
+                val_loss = get_cmc_loss_on_dataloader(self.model, self.validation_data, self.loss_function)
 
             print(f"Average Validation Loss: {val_loss}")
             self.wandb_run.log({"Validation Loss": val_loss})
@@ -208,7 +209,6 @@ class CMCTrainer(Trainer):
 
         self.wandb_run.alert("Run Finished", f"Your run ({self.wandb_run.name}) finished\nValidation Loss: {val_loss}")
         self.wandb_run.finish(0)
-
 
 
 if __name__ == "__main__":
