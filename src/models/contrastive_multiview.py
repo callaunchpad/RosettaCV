@@ -3,12 +3,14 @@ This file implements contrastive multiview coding with our additions
 """
 import torch
 import itertools
+import random
 
 import torch.nn as nn
 
-from typing import List
-from typing import TypeVar
-from torch.utils.data import DataLoader
+from typing import TypeVar, List, Callable
+from trainer.trainer import Trainer
+from collections import deque
+from losses.cmc_losses import get_cmc_loss_on_dataloader, contrastive_loss
 
 T = TypeVar("T")
 
@@ -73,20 +75,156 @@ class View:
         return latent_encoding
 
 
-def train_cmc(views: List[View], view_loader: DataLoader, num_negatives: int = 100):
+class WrapperModel(nn.Module):
     """
-    Trains the models specified by the views via a CMC approach
-    :param views: The views to be used in the training procedure
-    :param view_loader: The dataloader for the views, assumed to yield a list with length
-    equal to the number of views
-    :param num_negatives: The number of negative samples to sum over in the contrastive loss
-    :return: None
+    Wraps a series of view models for easier object oriented access
     """
+    def __init__(self, views: List[View], latent_dim: int, memory_bank_size: int = 200):
+        super(WrapperModel, self).__init__()
+
+        # Assign views and register submodules
+        self.views = views
+        self.view_encoders = nn.ModuleList([view.encoder for view in views])
+        self.view_decoders = nn.ModuleList([view.decoder for view in views if view.decoder is not None])
+
+        # Build the memory bank to sample from
+        self.memory_bank = deque()
+        self.memory_bank.extend([rand_vec.view(-1, latent_dim) for rand_vec
+                                 in torch.randn((memory_bank_size, latent_dim))])
+
+    def forward(self, X: List[torch.Tensor], views: List[int] = None, no_cache: bool = False) -> List[torch.Tensor]:
+        """
+        Performs a forward pass through the selected view models
+        :param X: A list of views to encode
+        :param views: A list of indices for which views to encode (if given a subset)
+        :param no_cache: Whether or not to skip caching the encodings in the memory bank
+        :return: A list of the encoded views
+        """
+
+        if views is None:
+            views = []
+        if not views:
+            views = list(range(len(self.views)))
+
+        # Encode the given views
+        encoded_views = [self.views[views[i]].encode(X[i]) for i in views]
+
+        # Enqueue these encodings in the memory bank
+        if not no_cache:
+            self.memory_bank.extend(encoded_views)
+
+        return encoded_views
+
+    def decode(self, encoding: List[torch.Tensor], views: List[int]) -> List[torch.Tensor]:
+        """
+        Decodes the latent embeddings of the selected views
+        :param encoding: The encodings of the given views
+        :param views: A list of indices for which views to decode to
+        :return: A list of decoded views
+        """
+        # To implement after base CMC is implemented
+        raise NotImplementedError()
+
+    def get_negative_samples(self, num_samples: int) -> torch.Tensor:
+        """
+        Samples from the memory bank
+        :param num_samples: The number of samples to pull
+        :return: The samples from the negative sample memory buffer
+        """
+        return torch.cat(random.sample(self.memory_bank, num_samples), 0)
 
 
-"""
-Helpers
-"""
+class CMCTrainer(Trainer):
+    """
+    Class to encompass training the model
+
+    Differences to Trainer:
+        - The dataloader is assumed to yield a list of views
+    """
+    def train(self, epochs: int = 10, save_best: bool = True, save_to: str = None):
+        """
+        Overloads the training loop from the standard trainer to train via CMC
+        :param epochs: The number of epochs to use
+        :param save_best: Whether or not to save the model with best validation loss
+        :param save_to: Where to save the models to
+        :return: None
+        """
+        if save_to is None:
+            save_to = "" # self.wandb_run.name
+        if save_best:
+            with torch.no_grad():
+                min_val_loss = get_cmc_loss_on_dataloader(self.model, self.train_data, contrastive_loss)
+
+        print(f"Min Val Loss: {min_val_loss}")
+        exit(0)
+        print("Beginning training...")
+        for epoch in range(epochs):
+            print(f"Epoch: {epoch}")
+            avg_loss = 0
+
+            # Train on all the batches
+            for index, batch in enumerate(self.train_data):
+                inputs = batch.to(self.device)
+
+                # Zero the gradients
+                self.optimizer.zero_grad()
+
+                # Forward pass
+                encodings = self.model(inputs)
+
+                # TODO: Implement loss computation
+
+                # Backward pass
+                loss_value = self.loss_function()
+                loss_value.backward()
+                self.wandb_run.log({"Train Loss": loss_value})
+
+                self.optimizer.step()
+
+                avg_loss += loss_value
+
+            avg_training_loss = avg_loss / len(self.train_data)
+            print(f"Average Training Loss: {avg_training_loss}")
+
+            # Compute validation loss
+            with torch.no_grad():
+                val_loss = util.get_loss_on_dataloader(self.model, self.validation_data, self.loss_function)
+
+            print(f"Average Validation Loss: {val_loss}")
+            self.wandb_run.log({"Validation Loss": val_loss})
+
+            if val_loss < min_val_loss and save_best:
+                print(f"Validation loss of {val_loss} better than previous best of {min_val_loss}")
+                print(f"Saving model...")
+                model_io.save_model_checkpoint(save_to, self.model, self.optimizer)
+                min_val_loss = val_loss
+
+            # Step the LR scheduler
+            self.scheduler.step(val_loss)
+
+            # Call the per epoch callbacks
+            for callback in self.callbacks:
+                callback(self.model, self.train_data, self.validation_data, self.optimizer, self.wandb_run)
+
+        self.wandb_run.alert("Run Finished", f"Your run ({self.wandb_run.name}) finished\nValidation Loss: {val_loss}")
+        self.wandb_run.finish(0)
+
+
 
 if __name__ == "__main__":
-    exit(0)
+    from torchvision import models
+    from losses.cmc_losses import contrastive_loss
+    import numpy as np
+
+    resnet = models.resnet18(pretrained=True)
+    resnet2 = models.resnet18(pretrained=True)
+
+    View1 = View(resnet)
+    View2 = View(resnet2)
+
+    sample_iterable = torch.randn((32, 3, 1, 3, 512, 512))
+
+    wrapper_model = WrapperModel([View1, View2], latent_dim=1000)
+    trainer = CMCTrainer(model=wrapper_model, loss_function=contrastive_loss, train_data=sample_iterable, validation_data=sample_iterable)
+    trainer.train(1)
+
