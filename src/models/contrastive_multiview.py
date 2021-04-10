@@ -214,7 +214,6 @@ class CMCTrainer(Trainer):
 if __name__ == "__main__":
     from torchvision import models
     from losses.cmc_losses import contrastive_loss
-    import numpy as np
 
     resnet = models.resnet18(pretrained=True)
     resnet2 = models.resnet18(pretrained=True)
