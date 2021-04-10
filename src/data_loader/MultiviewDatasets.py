@@ -20,7 +20,7 @@ class MultiviewDataset(Dataset):
         -  The identity view is not a default view for either inputs or labels
     """
 
-    def __init__(self, base_dataset: Dataset, input_views: List[Callable], label_views: List[Callable]):
+    def __init__(self, base_dataset: Dataset, input_views: List[Callable] = [], label_views: List[Callable] = []):
         """
         Initializes the base dataset and view creation methods
         :param base_dataset: The dataset to draw views from, assumed to yield a tuple

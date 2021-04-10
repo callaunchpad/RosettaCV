@@ -112,7 +112,7 @@ class WrapperModel(nn.Module):
 
         # Enqueue these encodings in the memory bank
         if not no_cache:
-            self.memory_bank.extend(encoded_views)
+            self.memory_bank.extend([view.detach() for view in encoded_views])
 
         return encoded_views
 
@@ -154,10 +154,8 @@ class CMCTrainer(Trainer):
             save_to = "" # self.wandb_run.name
         if save_best:
             with torch.no_grad():
-                min_val_loss = get_cmc_loss_on_dataloader(self.model, self.train_data, contrastive_loss)
+                min_val_loss = get_cmc_loss_on_dataloader(self.model, self.train_data, self.loss_function   )
 
-        print(f"Min Val Loss: {min_val_loss}")
-        exit(0)
         print("Beginning training...")
         for epoch in range(epochs):
             print(f"Epoch: {epoch}")
@@ -165,7 +163,7 @@ class CMCTrainer(Trainer):
 
             # Train on all the batches
             for index, batch in enumerate(self.train_data):
-                inputs = batch.to(self.device)
+                inputs = [view.to(self.device) for view in batch]
 
                 # Zero the gradients
                 self.optimizer.zero_grad()
@@ -189,7 +187,7 @@ class CMCTrainer(Trainer):
 
             # Compute validation loss
             with torch.no_grad():
-                val_loss = get_cmc_loss_on_dataloader(self.model, self.validation_data, self.loss_function)
+                val_loss = float(get_cmc_loss_on_dataloader(self.model, self.validation_data, self.loss_function))
 
             print(f"Average Validation Loss: {val_loss}")
             self.wandb_run.log({"Validation Loss": val_loss})
