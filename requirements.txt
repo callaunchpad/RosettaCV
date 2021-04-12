@@ -3,8 +3,6 @@ torchvision
 numpy
 tqdm
 tensorboard>=1.14
-<<<<<<< HEAD
 wandb
-=======
->>>>>>> be78741d0ab7d70b17585fbeec86ca4a04ce3530
 scipy
+matplotlib
