@@ -5,11 +5,17 @@ import torch.nn.functional as F
 # https://towardsdatascience.com/residual-network-implementing-resnet-a7da63c7b278
 
 class Conv2dAuto(nn.Conv2d):
+    """
+    convolution layer for dynamically adding padding based on kernel size
+    """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.padding = (self.kernel_size[0] // 2, self.kernel_size[1] // 2) # dynamic add padding based on the kernel_size
+        self.padding = (self.kernel_size[0] // 2, self.kernel_size[1] // 2)
 
 def activation_func(activation):
+    """
+    dictionary with different activation functions
+    """
     return nn.ModuleDict([
         ['relu', nn.ReLU(inplace=True)],
         ['leaky_relu', nn.LeakyReLU(negative_slope=0.01, inplace=True)],
@@ -19,6 +25,9 @@ def activation_func(activation):
 
 
 class ResidualBlock(nn.Module):
+    """
+    Interface for residual block: in_channels -> convolutional layers -> out_channels -> identity
+    """
     def __init__(self, in_channels, out_channels, activation='relu'):
         super().__init__()
         self.in_channels, self.out_channels, self.activation = in_channels, out_channels, activation
@@ -39,6 +48,9 @@ class ResidualBlock(nn.Module):
         return self.in_channels != self.out_channels
 
 class ResNetResidualBlock(ResidualBlock):
+    """
+    shortcut: Convolution -> BatchNorm
+    """
     def __init__(self, in_channels, out_channels, expansion=1, downsampling=1, conv=conv3x3, *args, **kwargs):
         super().__init__(in_channels, out_channels, *args, **kwargs)
         self.expansion, self.downsampling, self.conv = expansion, downsampling, conv
@@ -62,7 +74,7 @@ def conv_bn(in_channels, out_channels, conv, *args, **kwargs):
 
 class ResNetBasicBlock(ResNetResidualBlock):
     """
-    Basic ResNet block composed by two layers of 3x3conv/batchnorm/activation
+    two layers of 3x3conv/batchnorm/activation
     """
     expansion = 1
     def __init__(self, in_channels, out_channels, *args, **kwargs):
@@ -75,6 +87,9 @@ class ResNetBasicBlock(ResNetResidualBlock):
 
 
 class ResNetBottleNeckBlock(ResNetResidualBlock):
+    """
+    three layers of 1x1, 3x3, 1x1 convolutions
+    """
     expansion = 4
     def __init__(self, in_channels, out_channels, *args, **kwargs):
         super().__init__(in_channels, out_channels, expansion=4, *args, **kwargs)
@@ -88,7 +103,7 @@ class ResNetBottleNeckBlock(ResNetResidualBlock):
 
 class ResNetLayer(nn.Module):
     """
-    A ResNet layer composed by `n` blocks stacked one after the other
+    n ResNet blocks stacked on top of each other
     """
     def __init__(self, in_channels, out_channels, block=ResNetBasicBlock, n=1, *args, **kwargs):
         super().__init__()
@@ -106,7 +121,7 @@ class ResNetLayer(nn.Module):
 
 class ResNetEncoder(nn.Module):
     """
-    ResNet encoder composed by layers with increasing features.
+    multiple layers with increasing feature sizes
     """
     def __init__(self, in_channels=3, block_sizes=[64, 128, 256, 512], depths=[2,2,2,2], 
                  activation='relu', block=ResNetBasicBlock, *args, **kwargs):
@@ -139,8 +154,7 @@ class ResNetEncoder(nn.Module):
 
 class ResnetDecoder(nn.Module):
     """
-    This class represents the tail of ResNet. It performs a global pooling and maps the output to the
-    correct class by using a fully connected layer.
+    fully connected layer: global pooling + map features to correct class
     """
     def __init__(self, in_features, n_classes):
         super().__init__()
@@ -155,7 +169,9 @@ class ResnetDecoder(nn.Module):
 
 
 class ResNet(nn.Module):
-    
+    """
+    combines ResNet encoder and decoder
+    """
     def __init__(self, in_channels, n_classes, *args, **kwargs):
         super().__init__()
         self.encoder = ResNetEncoder(in_channels, *args, **kwargs)
@@ -189,3 +205,4 @@ def resnet101(in_channels, n_classes, block=ResNetBottleNeckBlock, *args, **kwar
 
 def resnet152(in_channels, n_classes, block=ResNetBottleNeckBlock, *args, **kwargs):
     return ResNet(in_channels, n_classes, block=block, deepths=[3, 8, 36, 3], *args, **kwargs)
+    
