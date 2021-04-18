@@ -73,7 +73,7 @@ class View:
 
         self.encoder.train(is_training)
 
-        return latent_encoding
+        return recovered_sample
 
 
 class WrapperModel(nn.Module):

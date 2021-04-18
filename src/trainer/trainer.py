@@ -30,7 +30,7 @@ class Trainer:
         """
         # Create optimizer if none passed
         if optimizer is None:
-            self.optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+            self.optimizer = torch.optim.Adam(model.parameters(recurse=True), lr=0.001)
         else:
             self.optimizer = optimizer
 
