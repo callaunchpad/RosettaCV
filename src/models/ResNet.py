@@ -12,6 +12,7 @@ class Conv2dAuto(nn.Conv2d):
         super().__init__(*args, **kwargs)
         self.padding = (self.kernel_size[0] // 2, self.kernel_size[1] // 2)
 
+
 def activation_func(activation):
     """
     dictionary with different activation functions
@@ -46,6 +47,7 @@ class ResidualBlock(nn.Module):
     @property
     def should_apply_shortcut(self):
         return self.in_channels != self.out_channels
+
 
 class ResNetResidualBlock(ResidualBlock):
     """
@@ -101,13 +103,13 @@ class ResNetBottleNeckBlock(ResNetResidualBlock):
              conv_bn(self.out_channels, self.expanded_channels, self.conv, kernel_size=1),
         )
 
+
 class ResNetLayer(nn.Module):
     """
     n ResNet blocks stacked on top of each other
     """
     def __init__(self, in_channels, out_channels, block=ResNetBasicBlock, n=1, *args, **kwargs):
         super().__init__()
-        # 'We perform downsampling directly by convolutional layers that have a stride of 2.'
         downsampling = 2 if in_channels != out_channels else 1
         self.blocks = nn.Sequential(
             block(in_channels , out_channels, *args, **kwargs, downsampling=downsampling),
@@ -119,12 +121,16 @@ class ResNetLayer(nn.Module):
         x = self.blocks(x)
         return x
 
+
 class ResNetEncoder(nn.Module):
     """
     multiple layers with increasing feature sizes
     """
-    def __init__(self, in_channels=3, block_sizes=[64, 128, 256, 512], depths=[2,2,2,2], 
+    def __init__(self, in_channels=3, block_sizes=None, depths=[2,2,2,2], 
                  activation='relu', block=ResNetBasicBlock, *args, **kwargs):
+        
+        if block_sizes == None:
+            block_sizes = [64, 128, 256, 512]
         super().__init__()
         self.block_sizes = block_sizes
         
@@ -151,6 +157,7 @@ class ResNetEncoder(nn.Module):
         for block in self.blocks:
             x = block(x)
         return x
+
 
 class ResnetDecoder(nn.Module):
     """
@@ -182,14 +189,7 @@ class ResNet(nn.Module):
         x = self.decoder(x)
         return x
 
-conv3x3 = partial(Conv2dAuto, kernel_size=3, bias=False)
-conv = conv3x3(in_channels=32, out_channels=64)
 
-res_block = ResidualBlock(32, 64)
-res_residual_block = ResNetResidualBlock(32, 64)
-res_basic_block = ResNetBasicBlock(32, 64)
-res_bottleneck_block = ResNetBottleNeckBlock(32, 64)
-res_layer = ResNetLayer(64, 128, block=ResNetBasicBlock, n=3)
 
 def resnet18(in_channels, n_classes, block=ResNetBasicBlock, *args, **kwargs):
     return ResNet(in_channels, n_classes, block=block, deepths=[2, 2, 2, 2], *args, **kwargs)
@@ -205,4 +205,12 @@ def resnet101(in_channels, n_classes, block=ResNetBottleNeckBlock, *args, **kwar
 
 def resnet152(in_channels, n_classes, block=ResNetBottleNeckBlock, *args, **kwargs):
     return ResNet(in_channels, n_classes, block=block, deepths=[3, 8, 36, 3], *args, **kwargs)
-    
+
+# conv3x3 = partial(Conv2dAuto, kernel_size=3, bias=False)
+# conv = conv3x3(in_channels=32, out_channels=64)
+
+# res_block = ResidualBlock(32, 64)
+# res_residual_block = ResNetResidualBlock(32, 64)
+# res_basic_block = ResNetBasicBlock(32, 64)
+# res_bottleneck_block = ResNetBottleNeckBlock(32, 64)
+# res_layer = ResNetLayer(64, 128, block=ResNetBasicBlock, n=3)
