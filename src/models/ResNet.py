@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
+from functools import partial
 
 # https://towardsdatascience.com/residual-network-implementing-resnet-a7da63c7b278
 
@@ -53,7 +54,7 @@ class ResNetResidualBlock(ResidualBlock):
     """
     shortcut: Convolution -> BatchNorm
     """
-    def __init__(self, in_channels, out_channels, expansion=1, downsampling=1, conv=conv3x3, *args, **kwargs):
+    def __init__(self, in_channels, out_channels, expansion=1, downsampling=1, conv=partial(Conv2dAuto, kernel_size=3, bias=False), *args, **kwargs):
         super().__init__(in_channels, out_channels, *args, **kwargs)
         self.expansion, self.downsampling, self.conv = expansion, downsampling, conv
         self.shortcut = nn.Sequential(
@@ -143,7 +144,7 @@ class ResNetEncoder(nn.Module):
         
         self.in_out_block_sizes = list(zip(block_sizes, block_sizes[1:]))
         self.blocks = nn.ModuleList([ 
-            ResNetLayer(block_sizes[0], block_sizes[0], n=[0], activation=activation, 
+            ResNetLayer(block_sizes[0], block_sizes[0], n=depths[0], activation=activation, 
                         block=block,*args, **kwargs),
             *[ResNetLayer(in_channels * block.expansion, 
                           out_channels, n=n, activation=activation, 
@@ -190,21 +191,20 @@ class ResNet(nn.Module):
         return x
 
 
-
 def resnet18(in_channels, n_classes, block=ResNetBasicBlock, *args, **kwargs):
-    return ResNet(in_channels, n_classes, block=block, deepths=[2, 2, 2, 2], *args, **kwargs)
+    return ResNet(in_channels, n_classes, block=block, depths=[2, 2, 2, 2], *args, **kwargs)
 
 def resnet34(in_channels, n_classes, block=ResNetBasicBlock, *args, **kwargs):
-    return ResNet(in_channels, n_classes, block=block, deepths=[3, 4, 6, 3], *args, **kwargs)
+    return ResNet(in_channels, n_classes, block=block, depths=[3, 4, 6, 3], *args, **kwargs)
 
 def resnet50(in_channels, n_classes, block=ResNetBottleNeckBlock, *args, **kwargs):
-    return ResNet(in_channels, n_classes, block=block, deepths=[3, 4, 6, 3], *args, **kwargs)
+    return ResNet(in_channels, n_classes, block=block, depths=[3, 4, 6, 3], *args, **kwargs)
 
 def resnet101(in_channels, n_classes, block=ResNetBottleNeckBlock, *args, **kwargs):
-    return ResNet(in_channels, n_classes, block=block, deepths=[3, 4, 23, 3], *args, **kwargs)
+    return ResNet(in_channels, n_classes, block=block, depths=[3, 4, 23, 3], *args, **kwargs)
 
 def resnet152(in_channels, n_classes, block=ResNetBottleNeckBlock, *args, **kwargs):
-    return ResNet(in_channels, n_classes, block=block, deepths=[3, 8, 36, 3], *args, **kwargs)
+    return ResNet(in_channels, n_classes, block=block, depths=[3, 8, 36, 3], *args, **kwargs)
 
 # conv3x3 = partial(Conv2dAuto, kernel_size=3, bias=False)
 # conv = conv3x3(in_channels=32, out_channels=64)
