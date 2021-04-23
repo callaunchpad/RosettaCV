@@ -55,8 +55,8 @@ elif mode == 'mpl':
     teacher_model = resnet34(in_channels=1, n_classes=10).to(device)
     student_model = resnet34(in_channels=1, n_classes=10).to(device)
 
-    #with wandb.init(project="MPL"):
-    train_mpl(teacher_model, student_model, train_dl, val_dl, batch_size, 'fashion_mnist', save_model=True)
+    with wandb.init(project="MPL-FashionMNIST"):
+        train_mpl(teacher_model, student_model, train_dl, val_dl, batch_size, 'fashion_mnist', num_epochs=20, save_model=True)
 
 def train_denoisingae(model, model_size, dataset, num_epochs=10, batch_size=32, learning_rate=1e-3, random_noise=0.15, save_model=False):
     # setup wandb config

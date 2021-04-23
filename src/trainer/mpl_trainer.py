@@ -14,7 +14,7 @@ NOTE: Expects dl to have batch size of 1 for unlabeled and labeled data
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-def train_mpl(teacher_model, student_model, unlabeled_dl, labeled_dl, batch_size, dataset, num_epochs=50, learning_rate=1e-4, save_model=False):
+def train_mpl(teacher_model, student_model, unlabeled_dl, labeled_dl, batch_size, dataset, num_epochs=10, learning_rate=1e-4, save_model=False):
     # Setup wandb
     config = wandb.config
     config.num_epochs = num_epochs
@@ -115,11 +115,11 @@ def train_mpl(teacher_model, student_model, unlabeled_dl, labeled_dl, batch_size
                 if global_step % 100 == 0:
                     print('Epoch:{} Batch:{}/{} Teacher Loss:{:.4f} Student Loss:{:.4f}'.format(epoch+1, batch_num, total_batches, 
                         batch_teacher_loss / batch_num, batch_student_loss / batch_num))
-                    #wandb.log({ 'batch_teacher_loss': batch_teacher_loss / batch_num, 'batch_student_loss': batch_student_loss / batch_num })
+                    wandb.log({ 'batch_teacher_loss': batch_teacher_loss / batch_num, 'batch_student_loss': batch_student_loss / batch_num })
             
             # display information for each epoch
             print('Epoch:{} Teacher Loss:{:.4f} Student Loss:{:.4f}'.format(epoch+1, batch_teacher_loss / num_iter, batch_student_loss / num_iter))
-            #wandb.log({ 'epoch': epoch + 1, 'teacher_loss': batch_teacher_loss / num_iter, 'student_loss': batch_student_loss / num_iter })
+            wandb.log({ 'epoch': epoch + 1, 'teacher_loss': batch_teacher_loss / num_iter, 'student_loss': batch_student_loss / num_iter })
 
         if save_model:
             torch.save(teacher_model.state_dict(), 'trained_models/' + dataset + '/mpl/mplteacher-' + datetime.now().strftime('%m-%d') + '-' + str(random_noise) + '.pt')
