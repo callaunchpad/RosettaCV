@@ -45,13 +45,18 @@ if mode == 'denoisingae':
             #wandb.alert(title="Train DenoisingAE", text="Finished training")
 elif mode == 'mpl':
     print('[*] Training MPL on FashionMNIST')
+    
+    torch.manual_seed(7)
+    batch_size = 32
     fashion_mnist_denoise = FashionMnistDenoising()
-    train_dl = fashion_mnist_denoise.loader(True, batch_size=32)
-    val_dl = fashion_mnist_denoise.loader(True, batch_size=32)
+    train_dl = fashion_mnist_denoise.loader(True, batch_size=batch_size)
+    val_dl = fashion_mnist_denoise.loader(True, batch_size=batch_size)
 
     teacher_model = resnet34(in_channels=1, n_classes=10).to(device)
     student_model = resnet34(in_channels=1, n_classes=10).to(device)
-    train_mpl(teacher_model, student_model, train_dl, val_dl, 'fashion_mnist')
+
+    #with wandb.init(project="MPL"):
+    train_mpl(teacher_model, student_model, train_dl, val_dl, batch_size, 'fashion_mnist')
 
 def train_denoisingae(model, model_size, dataset, num_epochs=10, batch_size=32, learning_rate=1e-3, random_noise=0.15, save_model=False):
     # setup wandb config
