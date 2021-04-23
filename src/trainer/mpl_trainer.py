@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from datetime import datetime
 
 import wandb
 
@@ -57,8 +58,8 @@ def train_mpl(teacher_model, student_model, unlabeled_dl, labeled_dl, batch_size
                     image_l = image_l.view(-1, 1, 28, 28).to(device)
                     image_u = image_u.view(-1, 1, 28, 28).to(device)
                 elif dataset == 'imagenet':
-                    image_l = image_l.view(-1, 1, 224, 224).to(device)
-                    image_u = image_u.view(-1, 1, 224, 224).to(device)
+                    image_l = image_l.view(-1, 3, 224, 224).to(device)
+                    image_u = image_u.view(-1, 3, 224, 224).to(device)
                 
                 label = label.type(torch.LongTensor).to(device)
 
@@ -73,10 +74,11 @@ def train_mpl(teacher_model, student_model, unlabeled_dl, labeled_dl, batch_size
 
                 # 3) generate pseudo labels from teacher
                 mpl_image_u = teacher_model(image_u)
+                soft_mpl_image_u = torch.softmax(mpl_image_u.detach(), dim=-1)
 
                 # 4) pass unlabeled through student, calculate gradients, and optimize student
                 s_logits_u = student_model(image_u)
-                s_mpl_loss = F.binary_cross_entropy_with_logits(s_logits_u, mpl_image_u.detach()) # don't propogate gradients into teacher
+                s_mpl_loss = F.binary_cross_entropy_with_logits(s_logits_u, soft_mpl_image_u) # don't propogate gradients into teacher
                 s_mpl_loss.backward() # calculate gradients for student network
                 s_optimizer.step() # step in the direction of gradients for student network
                 # We will clear out gradients at the end
@@ -122,8 +124,8 @@ def train_mpl(teacher_model, student_model, unlabeled_dl, labeled_dl, batch_size
             wandb.log({ 'epoch': epoch + 1, 'teacher_loss': batch_teacher_loss / num_iter, 'student_loss': batch_student_loss / num_iter })
 
         if save_model:
-            torch.save(teacher_model.state_dict(), 'trained_models/' + dataset + '/mpl/mplteacher-' + datetime.now().strftime('%m-%d') + '-' + str(random_noise) + '.pt')
-            torch.save(student_model.state_dict(), 'trained_models/' + dataset + '/mpl/mplstudent-' + datetime.now().strftime('%m-%d') + '-' + str(random_noise) + '.pt')
+            torch.save(teacher_model.state_dict(), 'trained_models/' + dataset + '/mpl/mplteacher-' + datetime.now().strftime('%m-%d') + '.pt')
+            torch.save(student_model.state_dict(), 'trained_models/' + dataset + '/mpl/mplstudent-' + datetime.now().strftime('%m-%d') + '.pt')
 
     else:
         print('[!] More labeled data than unlabeled')

@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from torchvision import transforms
 from torchvision.datasets import ImageFolder
+from torch.utils.data import Dataset, DataLoader, random_split
 import wandb
 from datetime import datetime
 
@@ -16,6 +17,7 @@ from trainer.mpl_trainer import train_mpl
 from trainer.trainer import Trainer
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
+torch.manual_seed(7)
 
 print('[*] Training on ' + device)
 
@@ -44,19 +46,34 @@ if mode == 'denoisingae':
             train_denoisingae(model, model_size, 'imagenet', num_epochs=5, random_noise=noise_amt, save_model=True)
             #wandb.alert(title="Train DenoisingAE", text="Finished training")
 elif mode == 'mpl':
+    '''
     print('[*] Training MPL on FashionMNIST')
-    
-    torch.manual_seed(7)
     batch_size = 32
     fashion_mnist_denoise = FashionMnistDenoising()
     train_dl = fashion_mnist_denoise.loader(True, batch_size=batch_size)
     val_dl = fashion_mnist_denoise.loader(True, batch_size=batch_size)
+    '''
 
-    teacher_model = resnet34(in_channels=1, n_classes=10).to(device)
-    student_model = resnet34(in_channels=1, n_classes=10).to(device)
+    # Use only train set and split into train / val
+    print('[*] Training MPL on ImageNet')
+    batch_size = 32
 
-    with wandb.init(project="MPL-FashionMNIST"):
-        train_mpl(teacher_model, student_model, train_dl, val_dl, batch_size, 'fashion_mnist', num_epochs=20, save_model=True)
+    transform = transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.ToTensor()
+    ])
+    imageNet_dataset = ImageFolder('/datasets/imagenetwhole/ilsvrc2012/train/', transform=transform)
+    lengths = [int(len(imageNet_dataset)*0.6), len(imageNet_dataset) - int(len(imageNet_dataset)*0.6)]
+    split_train_dataset, split_val_dataset = random_split(imageNet_dataset, lengths)
+    train_dl = DataLoader(dataset=split_train_dataset, batch_size=batch_size, shuffle=True)
+    val_dl = DataLoader(dataset=split_val_dataset, batch_size=batch_size, shuffle=True)
+
+    teacher_model = resnet34(in_channels=3, n_classes=1000).to(device)
+    student_model = resnet34(in_channels=3, n_classes=1000).to(device)
+
+    with wandb.init(project="MPL-ImageNet"):
+        train_mpl(teacher_model, student_model, train_dl, val_dl, batch_size, 'imagenet', num_epochs=10, save_model=True)
 
 def train_denoisingae(model, model_size, dataset, num_epochs=10, batch_size=32, learning_rate=1e-3, random_noise=0.15, save_model=False):
     # setup wandb config
@@ -68,7 +85,6 @@ def train_denoisingae(model, model_size, dataset, num_epochs=10, batch_size=32, 
     config.model_size = model_size
 
     # begin training
-    torch.manual_seed(7)
     if dataset == 'fashion_mnist':
         print('[*] Training DenoisingAE on FashionMNIST')
         fashion_mnist_denoise = FashionMnistDenoising()
