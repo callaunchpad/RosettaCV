@@ -121,5 +121,9 @@ def train_mpl(teacher_model, student_model, unlabeled_dl, labeled_dl, batch_size
             print('Epoch:{} Teacher Loss:{:.4f} Student Loss:{:.4f}'.format(epoch+1, batch_teacher_loss / num_iter, batch_student_loss / num_iter))
             #wandb.log({ 'epoch': epoch + 1, 'teacher_loss': batch_teacher_loss / num_iter, 'student_loss': batch_student_loss / num_iter })
 
+        if save_model:
+            torch.save(teacher_model.state_dict(), 'trained_models/' + dataset + '/mpl/mplteacher-' + datetime.now().strftime('%m-%d') + '-' + str(random_noise) + '.pt')
+            torch.save(student_model.state_dict(), 'trained_models/' + dataset + '/mpl/mplstudent-' + datetime.now().strftime('%m-%d') + '-' + str(random_noise) + '.pt')
+
     else:
         print('[!] More labeled data than unlabeled')
