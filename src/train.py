@@ -56,7 +56,7 @@ elif mode == 'mpl':
 
     # Use only train set and split into train / val
     print('[*] Training MPL on ImageNet')
-    batch_size = 32
+    batch_size = 256
 
     transform = transforms.Compose([
         transforms.Resize(256),
@@ -70,10 +70,12 @@ elif mode == 'mpl':
     val_dl = DataLoader(dataset=split_val_dataset, batch_size=batch_size, shuffle=True)
 
     teacher_model = resnet34(in_channels=3, n_classes=1000).to(device)
+    teacher_model = nn.DataParallel(teacher_model, device_ids=[0, 1])
     student_model = resnet34(in_channels=3, n_classes=1000).to(device)
+    student_model = nn.DataParallel(student_model, device_ids=[0, 1])
 
     with wandb.init(project="MPL-ImageNet"):
-        train_mpl(teacher_model, student_model, train_dl, val_dl, batch_size, 'imagenet', num_epochs=10, save_model=True)
+        train_mpl(teacher_model, student_model, train_dl, val_dl, batch_size, 'imagenet', num_epochs=3, learning_rate=1e-2, weight_u=1.5, save_model=True)
 
 def train_denoisingae(model, model_size, dataset, num_epochs=10, batch_size=32, learning_rate=1e-3, random_noise=0.15, save_model=False):
     # setup wandb config
