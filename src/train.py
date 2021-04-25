@@ -69,13 +69,24 @@ elif mode == 'mpl':
     train_dl = DataLoader(dataset=split_train_dataset, batch_size=batch_size, shuffle=True)
     val_dl = DataLoader(dataset=split_val_dataset, batch_size=batch_size, shuffle=True)
 
+    checkpoint = torch.load('./trained_models/imagenet/mpl/v3-checkpoint-3-04-24.pt')
+    #print(checkpoint['teacher_model'])
+
     teacher_model = resnet34(in_channels=3, n_classes=1000).to(device)
     teacher_model = nn.DataParallel(teacher_model, device_ids=[0, 1])
+    teacher_model.load_state_dict(checkpoint['teacher_model'])
     student_model = resnet34(in_channels=3, n_classes=1000).to(device)
     student_model = nn.DataParallel(student_model, device_ids=[0, 1])
+    student_model.load_state_dict(checkpoint['student_model'])
+
+    t_optimizer = torch.optim.Adam(teacher_model.parameters(), lr=1e-3, weight_decay=1e-5)
+    t_optimizer.load_state_dict(checkpoint['t_optimizer'])
+    s_optimizer = torch.optim.Adam(student_model.parameters(), lr=1e-3, weight_decay=1e-5)
+    s_optimizer.load_state_dict(checkpoint['s_optimizer'])
 
     with wandb.init(project="MPL-ImageNet"):
-        train_mpl(teacher_model, student_model, train_dl, val_dl, batch_size, 'imagenet', num_epochs=3, learning_rate=1e-2, weight_u=1.5, save_model=True)
+        train_mpl(teacher_model, student_model, train_dl, val_dl, batch_size, 'imagenet', num_epochs=3, learning_rate=1e-2, 
+            weight_u=1.5, save_model=True, t_optimizer=t_optimizer, s_optimizer=s_optimizer)
 
 def train_denoisingae(model, model_size, dataset, num_epochs=10, batch_size=32, learning_rate=1e-3, random_noise=0.15, save_model=False):
     # setup wandb config

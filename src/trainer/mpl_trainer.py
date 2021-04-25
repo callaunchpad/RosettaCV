@@ -15,7 +15,8 @@ NOTE: Expects dl to have batch size of 1 for unlabeled and labeled data
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-def train_mpl(teacher_model, student_model, unlabeled_dl, labeled_dl, batch_size, dataset, num_epochs=10, learning_rate=1e-3, weight_u=1, save_model=False):
+def train_mpl(teacher_model, student_model, unlabeled_dl, labeled_dl, batch_size, dataset, num_epochs=10, learning_rate=1e-3,
+    weight_u=1, save_model=False, t_optimizer=None, s_optimizer=None):
     # Setup wandb
     config = wandb.config
     config.num_epochs = num_epochs
@@ -23,8 +24,10 @@ def train_mpl(teacher_model, student_model, unlabeled_dl, labeled_dl, batch_size
     config.batch_size = batch_size
 
     # Setup definitions
-    t_optimizer = torch.optim.Adam(teacher_model.parameters(), lr=learning_rate, weight_decay=1e-5)
-    s_optimizer = torch.optim.Adam(student_model.parameters(), lr=learning_rate, weight_decay=1e-5)
+    if not t_optimizer:
+        t_optimizer = torch.optim.Adam(teacher_model.parameters(), lr=learning_rate, weight_decay=1e-5)
+    if not s_optimizer:
+        s_optimizer = torch.optim.Adam(student_model.parameters(), lr=learning_rate, weight_decay=1e-5)
 
     teacher_model.train()
     student_model.train()
@@ -130,7 +133,7 @@ def train_mpl(teacher_model, student_model, unlabeled_dl, labeled_dl, batch_size
                 'teacher_model': teacher_model.state_dict(),
                 'student_model': student_model.state_dict()
             }
-            torch.save(checkpoint, 'trained_models/' + dataset + '/mpl/v2-checkpoint-' + str(num_epochs) + '-' + datetime.now().strftime('%m-%d') + '.pt')
+            torch.save(checkpoint, 'trained_models/' + dataset + '/mpl/v4-checkpoint-' + str(num_epochs) + '-' + datetime.now().strftime('%m-%d') + '.pt')
 
     else:
         print('[!] More labeled data than unlabeled')

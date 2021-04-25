@@ -57,7 +57,14 @@ elif mode == 'imagenet':
     val_dl = image_net_task.loader(False, batch_size=32)
 
     student_model = resnet34(in_channels=3, n_classes=1000).to(device)
-    student_model_state_dict = torch.load('./trained_models/imagenet/mpl/mplstudent-04-23.pt')
+    
+    # load state dict and convert from multigpu to generic
+    checkpoint = torch.load('./trained_models/imagenet/mpl/v3-checkpoint-3-04-24.pt')
+    from collections import OrderedDict
+    student_model_state_dict = OrderedDict()
+    for k, v in checkpoint['teacher_model'].items():
+        name = k[7:] # remove `module.`
+        student_model_state_dict[name] = v
     student_model.load_state_dict(student_model_state_dict)
     student_model.eval()
 
