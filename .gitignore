@@ -1,3 +1,6 @@
+# Trained models
+src/trained_models/*
+
 # Vim/Python stuff
 *.py.swp*
 

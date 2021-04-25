@@ -1,19 +1,83 @@
 import torch
 import torch.nn as nn
 from torchvision import transforms
+from torchvision.datasets import ImageFolder
+from torch.utils.data import Dataset, DataLoader, random_split
 import wandb
 from datetime import datetime
 
 import matplotlib.pyplot as plt
 
 from models.DenoisingAE import EncoderSm, DecoderSm, EncoderMd, DecoderMd, EncoderLg, DecoderLg, DenoisingAE
-from data_loader.data_loaders import FashionMnistDenoising, ImageNetDenoising
+from models.ResNet import resnet34
+from models.CNN import CNN
+from data_loader.data_loaders import FashionMnistDenoising, ImageNetDenoising, FashionMnistDataset
+from data_loader.few_shot_dataloaders import get_few_shot_dataloader
+from trainer.mpl_trainer import train_mpl
+from trainer.trainer import Trainer
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
+torch.manual_seed(7)
 
 print('[*] Training on ' + device)
 
-def train(model, model_size, dataset, num_epochs=10, batch_size=32, learning_rate=1e-3, random_noise=0.15, save_model=False):
+mode = 'mpl'
+
+if mode == 'denoisingae':
+    #r_noise = [0.10, 0.15, 0.20, 0.30, 0.40]
+    r_noise = [0.40]
+    model_size = 'sm' # sm, md, or lg
+
+    for noise_amt in r_noise:
+        if model_size == 'sm':
+            encoder = EncoderSm().to(device)
+            decoder = DecoderSm().to(device)
+        elif model_size == 'md':
+            encoder = EncoderMd().to(device)
+            decoder = DecoderMd().to(device)
+        else:
+            encoder = EncoderLg().to(device)
+            decoder = DecoderLg().to(device)
+
+        model = DenoisingAE(encoder, decoder).to(device)
+        model = nn.DataParallel(model, device_ids=[0, 1])
+
+        with wandb.init(project="DenoisingAE"):
+            train_denoisingae(model, model_size, 'imagenet', num_epochs=5, random_noise=noise_amt, save_model=True)
+            #wandb.alert(title="Train DenoisingAE", text="Finished training")
+elif mode == 'mpl':
+    '''
+    print('[*] Training MPL on FashionMNIST')
+    batch_size = 32
+    fashion_mnist_denoise = FashionMnistDenoising()
+    train_dl = fashion_mnist_denoise.loader(True, batch_size=batch_size)
+    val_dl = fashion_mnist_denoise.loader(True, batch_size=batch_size)
+    '''
+
+    # Use only train set and split into train / val
+    print('[*] Training MPL on ImageNet')
+    batch_size = 256
+
+    transform = transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.ToTensor()
+    ])
+    imageNet_dataset = ImageFolder('/datasets/imagenetwhole/ilsvrc2012/train/', transform=transform)
+    lengths = [int(len(imageNet_dataset)*0.6), len(imageNet_dataset) - int(len(imageNet_dataset)*0.6)]
+    split_train_dataset, split_val_dataset = random_split(imageNet_dataset, lengths)
+    train_dl = DataLoader(dataset=split_train_dataset, batch_size=batch_size, shuffle=True)
+    val_dl = DataLoader(dataset=split_val_dataset, batch_size=batch_size, shuffle=True)
+
+    teacher_model = resnet34(in_channels=3, n_classes=1000).to(device)
+    teacher_model = nn.DataParallel(teacher_model, device_ids=[0, 1])
+    student_model = resnet34(in_channels=3, n_classes=1000).to(device)
+    student_model = nn.DataParallel(student_model, device_ids=[0, 1])
+
+    with wandb.init(project="MPL-ImageNet"):
+        train_mpl(teacher_model, student_model, train_dl, val_dl, batch_size, 'imagenet', num_epochs=3, learning_rate=1e-2, weight_u=1.5, save_model=True)
+
+def train_denoisingae(model, model_size, dataset, num_epochs=10, batch_size=32, learning_rate=1e-3, random_noise=0.15, save_model=False):
     # setup wandb config
     config = wandb.config
     config.num_epochs = num_epochs
@@ -23,7 +87,6 @@ def train(model, model_size, dataset, num_epochs=10, batch_size=32, learning_rat
     config.model_size = model_size
 
     # begin training
-    torch.manual_seed(7)
     if dataset == 'fashion_mnist':
         print('[*] Training DenoisingAE on FashionMNIST')
         fashion_mnist_denoise = FashionMnistDenoising()
@@ -93,25 +156,3 @@ def train(model, model_size, dataset, num_epochs=10, batch_size=32, learning_rat
     
     if save_model:
         torch.save(model.state_dict(), 'trained_models/' + dataset + '/denoisingae_' + model_size + '/denoisingae-' + datetime.now().strftime('%m-%d') + '-' + str(random_noise) + '.pt')
-
-#r_noise = [0.10, 0.15, 0.20, 0.30, 0.40]
-r_noise = [0.40]
-model_size = 'sm' # sm, md, or lg
-
-for noise_amt in r_noise:
-    if model_size == 'sm':
-        encoder = EncoderSm().to(device)
-        decoder = DecoderSm().to(device)
-    elif model_size == 'md':
-        encoder = EncoderMd().to(device)
-        decoder = DecoderMd().to(device)
-    else:
-        encoder = EncoderLg().to(device)
-        decoder = DecoderLg().to(device)
-
-    model = DenoisingAE(encoder, decoder).to(device)
-    model = nn.DataParallel(model, device_ids=[0, 1])
-
-    with wandb.init(project="DenoisingAE"):
-        train(model, model_size, 'imagenet', num_epochs=5, random_noise=noise_amt, save_model=True)
-        #wandb.alert(title="Train DenoisingAE", text="Finished training")
