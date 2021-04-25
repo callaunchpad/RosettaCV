@@ -7,6 +7,7 @@ import random
 
 import torch.nn as nn
 import utils.model_io as model_io
+import utils.data_io as data_io
 
 from typing import TypeVar, List, Callable
 from trainer.trainer import Trainer
@@ -151,7 +152,7 @@ class CMCTrainer(Trainer):
         :return: None
         """
         if save_to is None:
-            save_to = "" # self.wandb_run.name
+            save_to = self.wandb_run.name
         if save_best:
             with torch.no_grad():
                 min_val_loss = get_cmc_loss_on_dataloader(self.model, self.train_data, self.loss_function   )
@@ -209,19 +210,59 @@ class CMCTrainer(Trainer):
         self.wandb_run.finish(0)
 
 
+from torchvision import models, datasets
+from torchvision.transforms import Compose, ToTensor
+from data_loader.MultiviewDatasets import get_noisy_view, MultiviewDataset, identity_view
+from torch.utils.data import DataLoader
+resnet_feature_size = 512
+
+class FeatureExtractor(nn.Module):
+    def __init__(self, latent_dim: int = 512):
+        super(FeatureExtractor, self).__init__()
+        self.resnet = models.resnet18(pretrained=False)
+        self.features = None
+
+        # Register a hook for forward pass caching
+        self.resnet.layer4.register_forward_hook(self.intermediate_hook)
+        self.linear = nn.Linear(resnet_feature_size, latent_dim)
+
+    def forward(self, X):
+        # Perform forward pass
+        self.resnet(X)
+
+        return self.linear(self.features)
+
+    def intermediate_hook(self, module, inputs, outputs):
+        self.features = torch.clone(outputs.view(outputs.size()[0], -1))
+
+
+
 if __name__ == "__main__":
-    from torchvision import models
+    fe1 = FeatureExtractor()
+    fe2 = FeatureExtractor()
+
+    base_data = datasets.CIFAR10("../data", transform=Compose([ToTensor()]))
+    noisy_view = get_noisy_view()
+
+    ds = MultiviewDataset(base_data, [identity_view, noisy_view])
+
+    train_proportion = 0.7
+    train_len = int(len(ds) * 0.7 * 0.1)
+    valid_len = int(len(ds) * 0.1 - train_len)
+    rest = len(ds) - train_len - valid_len
+
+    train_data, valid_data, _ = torch.utils.data.random_split(ds, [train_len, valid_len, rest])
+    train_loader, valid_loader = DataLoader(train_data, batch_size=16), DataLoader(valid_data, batch_size=16)
+
     from losses.cmc_losses import contrastive_loss
+    from models.CMC.contrastive_multiview import CMCTrainer, View, WrapperModel
 
-    resnet = models.resnet18(pretrained=True)
-    resnet2 = models.resnet18(pretrained=True)
+    view1, view2 = View(fe1), View(fe2)
+    model = WrapperModel([view1, view2], 512)
 
-    View1 = View(resnet)
-    View2 = View(resnet2)
+    trainer = CMCTrainer(model, contrastive_loss, train_loader, validation_data=valid_loader)
 
-    sample_iterable = torch.randn((32, 3, 1, 3, 512, 512))
+    trainer.train(50)
 
-    wrapper_model = WrapperModel([View1, View2], latent_dim=1000)
-    trainer = CMCTrainer(model=wrapper_model, loss_function=contrastive_loss, train_data=sample_iterable, validation_data=sample_iterable)
-    trainer.train(1)
+
 

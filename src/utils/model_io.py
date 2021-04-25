@@ -40,19 +40,6 @@ def load_model_checkpoint(path: str) -> Tuple:
     return checkpoint['model'], checkpoint.get('optimizer', None)
 
 
-def load_nose_model_only(path: str) -> Module:
-    """
-    Loads a model from a checkpoint
-    :param path: The path to the checkpoint
-    :return: The model
-    """
-    # Create the model
-    model = SmallCNN()
-    model.load_state_dict(load_model_checkpoint(path)[0])
-
-    return model
-
-
 def visualize_model(model: Module, images: ndarray, experiment_name: str = "default") -> None:
     """
     Visualizes the given model in tensorboard
