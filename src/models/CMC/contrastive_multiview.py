@@ -7,7 +7,7 @@ import random
 
 import torch.nn as nn
 import utils.model_io as model_io
-import utils.data_io as data_io
+import utils.util as util
 
 from typing import TypeVar, List, Callable
 from trainer.trainer import Trainer
@@ -90,9 +90,10 @@ class WrapperModel(nn.Module):
         self.view_decoders = nn.ModuleList([view.decoder for view in views if view.decoder is not None])
 
         # Build the memory bank to sample from
+        model_device = util.get_project_device()
         self.memory_bank = deque()
         self.memory_bank.extend([rand_vec.view(-1, latent_dim) for rand_vec
-                                 in torch.randn((memory_bank_size, latent_dim))])
+                                 in torch.randn((memory_bank_size, latent_dim)).to(model_device)])
 
     def forward(self, X: List[torch.Tensor], views: List[int] = None, no_cache: bool = False) -> List[torch.Tensor]:
         """
@@ -155,7 +156,7 @@ class CMCTrainer(Trainer):
             save_to = self.wandb_run.name
         if save_best:
             with torch.no_grad():
-                min_val_loss = get_cmc_loss_on_dataloader(self.model, self.train_data, self.loss_function   )
+                min_val_loss = get_cmc_loss_on_dataloader(self.model, self.train_data, self.loss_function)
 
         print("Beginning training...")
         for epoch in range(epochs):
@@ -236,12 +237,11 @@ class FeatureExtractor(nn.Module):
         self.features = torch.clone(outputs.view(outputs.size()[0], -1))
 
 
-
 if __name__ == "__main__":
     fe1 = FeatureExtractor()
     fe2 = FeatureExtractor()
 
-    base_data = datasets.CIFAR10("../data", transform=Compose([ToTensor()]))
+    base_data = datasets.CIFAR10("../data", download=True, transform=Compose([ToTensor()]))
     noisy_view = get_noisy_view()
 
     ds = MultiviewDataset(base_data, [identity_view, noisy_view])
@@ -262,7 +262,7 @@ if __name__ == "__main__":
 
     trainer = CMCTrainer(model, contrastive_loss, train_loader, validation_data=valid_loader)
 
-    trainer.train(50)
+    trainer.train(500)
 
 
 
