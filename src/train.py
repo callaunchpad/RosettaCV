@@ -1,7 +1,9 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torchvision import transforms
-from torchvision.datasets import ImageFolder
+from torchvision.datasets import ImageFolder, CIFAR10
+import torchvision.models as torch_models
 from torch.utils.data import Dataset, DataLoader, random_split
 import wandb
 from datetime import datetime
@@ -9,7 +11,7 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 
 from models.DenoisingAE import EncoderSm, DecoderSm, EncoderMd, DecoderMd, EncoderLg, DecoderLg, DenoisingAE
-from models.ResNet import resnet34
+from models.ResNet import resnet50
 from models.CNN import CNN
 from data_loader.data_loaders import FashionMnistDenoising, ImageNetDenoising, FashionMnistDataset
 from data_loader.few_shot_dataloaders import get_few_shot_dataloader
@@ -21,72 +23,45 @@ torch.manual_seed(7)
 
 print('[*] Training on ' + device)
 
-mode = 'mpl'
+mode = 'finetune'
 
-if mode == 'denoisingae':
-    #r_noise = [0.10, 0.15, 0.20, 0.30, 0.40]
-    r_noise = [0.40]
-    model_size = 'sm' # sm, md, or lg
-
-    for noise_amt in r_noise:
-        if model_size == 'sm':
-            encoder = EncoderSm().to(device)
-            decoder = DecoderSm().to(device)
-        elif model_size == 'md':
-            encoder = EncoderMd().to(device)
-            decoder = DecoderMd().to(device)
-        else:
-            encoder = EncoderLg().to(device)
-            decoder = DecoderLg().to(device)
-
-        model = DenoisingAE(encoder, decoder).to(device)
-        model = nn.DataParallel(model, device_ids=[0, 1])
-
-        with wandb.init(project="DenoisingAE"):
-            train_denoisingae(model, model_size, 'imagenet', num_epochs=5, random_noise=noise_amt, save_model=True)
-            #wandb.alert(title="Train DenoisingAE", text="Finished training")
-elif mode == 'mpl':
-    '''
-    print('[*] Training MPL on FashionMNIST')
-    batch_size = 32
-    fashion_mnist_denoise = FashionMnistDenoising()
-    train_dl = fashion_mnist_denoise.loader(True, batch_size=batch_size)
-    val_dl = fashion_mnist_denoise.loader(True, batch_size=batch_size)
-    '''
-
-    # Use only train set and split into train / val
-    print('[*] Training MPL on ImageNet')
-    batch_size = 256
-
-    transform = transforms.Compose([
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor()
-    ])
-    imageNet_dataset = ImageFolder('/datasets/imagenetwhole/ilsvrc2012/train/', transform=transform)
-    lengths = [int(len(imageNet_dataset)*0.6), len(imageNet_dataset) - int(len(imageNet_dataset)*0.6)]
-    split_train_dataset, split_val_dataset = random_split(imageNet_dataset, lengths)
+def train_cifar(model, num_epochs=50, batch_size=32, version='v1', save_model=False, optimizer=None):
+    cifar10_dataset = CIFAR10(root="/datasets", download=True, transform=transforms.ToTensor())
+    lengths = [int(len(cifar10_dataset)*0.6), len(cifar10_dataset) - int(len(cifar10_dataset)*0.6)]
+    split_train_dataset, split_val_dataset = random_split(cifar10_dataset, lengths)
     train_dl = DataLoader(dataset=split_train_dataset, batch_size=batch_size, shuffle=True)
-    val_dl = DataLoader(dataset=split_val_dataset, batch_size=batch_size, shuffle=True)
 
-    checkpoint = torch.load('./trained_models/imagenet/mpl/v3-checkpoint-3-04-24.pt')
-    #print(checkpoint['teacher_model'])
+    model.train()
 
-    teacher_model = resnet34(in_channels=3, n_classes=1000).to(device)
-    teacher_model = nn.DataParallel(teacher_model, device_ids=[0, 1])
-    teacher_model.load_state_dict(checkpoint['teacher_model'])
-    student_model = resnet34(in_channels=3, n_classes=1000).to(device)
-    student_model = nn.DataParallel(student_model, device_ids=[0, 1])
-    student_model.load_state_dict(checkpoint['student_model'])
+    if not optimizer:
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-5)
 
-    t_optimizer = torch.optim.Adam(teacher_model.parameters(), lr=1e-3, weight_decay=1e-5)
-    t_optimizer.load_state_dict(checkpoint['t_optimizer'])
-    s_optimizer = torch.optim.Adam(student_model.parameters(), lr=1e-3, weight_decay=1e-5)
-    s_optimizer.load_state_dict(checkpoint['s_optimizer'])
+    for epoch in range(num_epochs):
+        batch_step = 0
+        total_batches = len(train_dl)
+        for image, label in train_dl:
+            image = image / 255
 
-    with wandb.init(project="MPL-ImageNet"):
-        train_mpl(teacher_model, student_model, train_dl, val_dl, batch_size, 'imagenet', num_epochs=3, learning_rate=1e-2, 
-            weight_u=1.5, save_model=True, t_optimizer=t_optimizer, s_optimizer=s_optimizer)
+            image = image.view(-1, 3, 32, 32).to(device)
+            label = label.type(torch.LongTensor).to(device)
+
+            out_logits = model(image)
+            loss = F.cross_entropy(out_logits, label)
+
+            loss.backward()
+            optimizer.step()
+            model.zero_grad()
+
+            batch_step += 1
+            if batch_step % 100 == 0:
+                print('Epoch:{} Batch:{}/{} Model Loss:{:.4f}'.format(epoch+1, batch_step, total_batches, loss.item()))
+
+    if save_model:
+        checkpoint = {
+            'optimizer': optimizer.state_dict(),
+            'model': model.state_dict()
+        }
+        torch.save(checkpoint, 'trained_models/cifar10/resnet/' + version + '-checkpoint-' + str(num_epochs) + '-' + datetime.now().strftime('%m-%d') + '.pt')
 
 def train_denoisingae(model, model_size, dataset, num_epochs=10, batch_size=32, learning_rate=1e-3, random_noise=0.15, save_model=False):
     # setup wandb config
@@ -167,3 +142,125 @@ def train_denoisingae(model, model_size, dataset, num_epochs=10, batch_size=32, 
     
     if save_model:
         torch.save(model.state_dict(), 'trained_models/' + dataset + '/denoisingae_' + model_size + '/denoisingae-' + datetime.now().strftime('%m-%d') + '-' + str(random_noise) + '.pt')
+
+if mode == 'denoisingae':
+    #r_noise = [0.10, 0.15, 0.20, 0.30, 0.40]
+    r_noise = [0.40]
+    model_size = 'sm' # sm, md, or lg
+
+    for noise_amt in r_noise:
+        if model_size == 'sm':
+            encoder = EncoderSm().to(device)
+            decoder = DecoderSm().to(device)
+        elif model_size == 'md':
+            encoder = EncoderMd().to(device)
+            decoder = DecoderMd().to(device)
+        else:
+            encoder = EncoderLg().to(device)
+            decoder = DecoderLg().to(device)
+
+        model = DenoisingAE(encoder, decoder).to(device)
+        model = nn.DataParallel(model, device_ids=[0, 1])
+
+        with wandb.init(project="DenoisingAE"):
+            train_denoisingae(model, model_size, 'imagenet', num_epochs=5, random_noise=noise_amt, save_model=True)
+            #wandb.alert(title="Train DenoisingAE", text="Finished training")
+elif mode == 'mpl':
+    '''
+    print('[*] Training MPL on FashionMNIST')
+    batch_size = 32
+    fashion_mnist_denoise = FashionMnistDenoising()
+    train_dl = fashion_mnist_denoise.loader(True, batch_size=batch_size)
+    val_dl = fashion_mnist_denoise.loader(True, batch_size=batch_size)
+    '''
+
+    '''
+    # Use only train set and split into train / val
+    print('[*] Training MPL on ImageNet')
+    batch_size = 256
+
+    transform = transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.ToTensor()
+    ])
+    imageNet_dataset = ImageFolder('/datasets/imagenetwhole/ilsvrc2012/train/', transform=transform)
+    lengths = [int(len(imageNet_dataset)*0.6), len(imageNet_dataset) - int(len(imageNet_dataset)*0.6)]
+    split_train_dataset, split_val_dataset = random_split(imageNet_dataset, lengths)
+    train_dl = DataLoader(dataset=split_train_dataset, batch_size=batch_size, shuffle=True)
+    val_dl = DataLoader(dataset=split_val_dataset, batch_size=batch_size, shuffle=True)
+    '''
+
+    print('[*] Training MPL on Cifar10')
+    batch_size = 32
+
+    cifar10_dataset = CIFAR10(root="/datasets", download=True, transform=transforms.ToTensor())
+    lengths = [int(len(cifar10_dataset)*0.6), len(cifar10_dataset) - int(len(cifar10_dataset)*0.6)]
+    split_train_dataset, split_val_dataset = random_split(cifar10_dataset, lengths)
+    train_dl = DataLoader(dataset=split_train_dataset, batch_size=batch_size, shuffle=True)
+    val_dl = DataLoader(dataset=split_val_dataset, batch_size=batch_size, shuffle=True)
+
+    checkpoint = torch.load('./trained_models/cifar10/mpl/v3-checkpoint-25-04-25.pt')
+
+    '''
+    # train teacher model from scratch
+    teacher_model = resnet34(in_channels=3, n_classes=100).to(device)
+    teacher_model = nn.DataParallel(teacher_model, device_ids=[0, 1])
+    #teacher_model.load_state_dict(checkpoint['teacher_model'])
+    '''
+    # train teacher model from pretrained resnet
+    teacher_model = torch_models.resnet34(pretrained=True)
+    teacher_model.fc = nn.Linear(512, 10)
+    # freeze earlier layers (first 7 out of 10)
+    ct = 0
+    for child in teacher_model.children():
+        ct += 1
+        if ct < 7:
+            for param in child.parameters():
+                param.requires_grad = False
+    teacher_model = teacher_model.to(device)
+    teacher_model = nn.DataParallel(teacher_model, device_ids=[0, 1])
+    teacher_model.load_state_dict(checkpoint['teacher_model'])
+
+    student_model = resnet50(in_channels=3, n_classes=10).to(device)
+    student_model = nn.DataParallel(student_model, device_ids=[0, 1])
+    student_model.load_state_dict(checkpoint['student_model'])
+
+    t_optimizer = torch.optim.Adam(teacher_model.parameters(), lr=1e-4, weight_decay=1e-5)
+    t_optimizer.load_state_dict(checkpoint['t_optimizer'])
+    s_optimizer = torch.optim.Adam(student_model.parameters(), lr=1e-4, weight_decay=1e-5)
+    s_optimizer.load_state_dict(checkpoint['s_optimizer'])
+
+    with wandb.init(project="MPL-Cifar10"):
+        train_mpl(teacher_model, student_model, train_dl, val_dl, batch_size, 'cifar10', num_epochs=25, learning_rate=1e-2, 
+            weight_u=1.5, save_model=True, t_optimizer=t_optimizer, s_optimizer=s_optimizer, version="v4")
+
+elif mode == 'baseline':
+    print('[*] Training ResNet50 on Cifar10')
+
+    model = torch_models.resnet50(pretrained=True)
+    model.fc = nn.Linear(512, 10)
+    # freeze earlier layers (first 7 out of 10)
+    ct = 0
+    for child in model.children():
+        ct += 1
+        if ct < 7:
+            for param in child.parameters():
+                param.requires_grad = False
+    model = model.to(device)
+    model = nn.DataParallel(model, device_ids=[0, 1])
+
+    train_cifar(model, num_epochs=25, batch_size=32, version='r50', save_model=True)
+
+elif mode == 'finetune':
+    print('[*] Finetuning MPL student on Cifar10')
+    checkpoint = torch.load('./trained_models/cifar10/mpl/v3-checkpoint-25-04-25.pt')
+
+    student_model = resnet50(in_channels=3, n_classes=10).to(device)
+    student_model = nn.DataParallel(student_model, device_ids=[0, 1])
+    student_model.load_state_dict(checkpoint['student_model'])
+
+    s_optimizer = torch.optim.Adam(student_model.parameters(), lr=1e-5, weight_decay=1e-5)
+    s_optimizer.load_state_dict(checkpoint['s_optimizer'])
+
+    train_cifar(student_model, num_epochs=10, batch_size=32, version='v1-finetunempl', save_model=True, optimizer=s_optimizer)

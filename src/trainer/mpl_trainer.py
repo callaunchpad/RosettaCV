@@ -16,7 +16,7 @@ NOTE: Expects dl to have batch size of 1 for unlabeled and labeled data
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 def train_mpl(teacher_model, student_model, unlabeled_dl, labeled_dl, batch_size, dataset, num_epochs=10, learning_rate=1e-3,
-    weight_u=1, save_model=False, t_optimizer=None, s_optimizer=None):
+    weight_u=1, save_model=False, t_optimizer=None, s_optimizer=None, version="v1"):
     # Setup wandb
     config = wandb.config
     config.num_epochs = num_epochs
@@ -63,7 +63,10 @@ def train_mpl(teacher_model, student_model, unlabeled_dl, labeled_dl, batch_size
                 elif dataset == 'imagenet':
                     image_l = image_l.view(-1, 3, 224, 224).to(device)
                     image_u = image_u.view(-1, 3, 224, 224).to(device)
-                
+                elif dataset == 'cifar10':
+                    image_l = image_l.view(-1, 3, 32, 32).to(device)
+                    image_u = image_u.view(-1, 3, 32, 32).to(device)
+
                 label = label.type(torch.LongTensor).to(device)
 
                 # 1) pass labeled image through teacher and save the loss for future backprop
@@ -73,7 +76,7 @@ def train_mpl(teacher_model, student_model, unlabeled_dl, labeled_dl, batch_size
                 # 2) pass labeled image through student and save the loss
                 with torch.no_grad(): # we don't want to update student
                     s_logits_l = student_model(image_l)
-                s_l_loss_1 = F.cross_entropy(s_logits_l, label) # cross_entropy interally takes the averagee
+                s_l_loss_1 = F.cross_entropy(s_logits_l, label) # cross_entropy interally takes the average
 
                 # 3) generate pseudo labels from teacher
                 mpl_image_u = teacher_model(image_u)
@@ -133,7 +136,7 @@ def train_mpl(teacher_model, student_model, unlabeled_dl, labeled_dl, batch_size
                 'teacher_model': teacher_model.state_dict(),
                 'student_model': student_model.state_dict()
             }
-            torch.save(checkpoint, 'trained_models/' + dataset + '/mpl/v4-checkpoint-' + str(num_epochs) + '-' + datetime.now().strftime('%m-%d') + '.pt')
+            torch.save(checkpoint, 'trained_models/' + dataset + '/mpl/' + version + '-checkpoint-' + str(num_epochs) + '-' + datetime.now().strftime('%m-%d') + '.pt')
 
     else:
         print('[!] More labeled data than unlabeled')
