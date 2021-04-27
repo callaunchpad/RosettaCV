@@ -37,7 +37,7 @@ def get_positive_and_negative_samples(encodings: List[torch.Tensor], model: nn.M
     core_views = core_views.unsqueeze(1)
 
     # Sample a view for each core view to contrast with
-    positive_views_indices = torch.randint(1, len(encodings), (batch_size,))
+    positive_views_indices = torch.randint(1, num_views, (batch_size,))
     positive_views = torch.cat([
         encodings[positive_views_indices[i]][i].unsqueeze(0) for i in range(batch_size)
     ]).unsqueeze(1)

@@ -8,11 +8,13 @@ import random
 import torch.nn as nn
 import utils.model_io as model_io
 import utils.util as util
+import numpy as np
 
 from typing import TypeVar, List, Callable
 from trainer.trainer import Trainer
 from collections import deque
 from losses.cmc_losses import get_cmc_loss_on_dataloader, get_positive_and_negative_samples
+from itertools import product
 
 T = TypeVar("T")
 
@@ -23,14 +25,21 @@ class View:
     """
     get_new_id = itertools.count().__next__
 
-    def __init__(self, encoder: nn.Module, decoder: nn.Module = None, view_id: str = ""):
+    def __init__(self, encoder: nn.Module, decoder: nn.Module = None, view_id: str = "",
+                 reconstruction_loss: Callable = None):
         """
         Sets up the view with the given parameters
         :param encoder: The encoder to use to transform this view to the shared latent
         :param decoder: The decoder to use to transform the latent into this view
+        :param view_id: A string identifier e.g. Image caption
+        :param reconstruction_loss: A loss for comparing latents that are decoded into this
+        view
         """
+        assert not decoder is not None and reconstruction_loss is None, "Reconstruction loss must be specified if" \
+                                                                        "decoder is specified."
         self.encoder = encoder
         self.decoder = decoder
+        self.reconstruction_loss = reconstruction_loss
 
         # Assign a numerical view_id if none is given
         self.view_id = view_id if view_id != "" else View.get_new_id()
@@ -75,6 +84,18 @@ class View:
         self.encoder.train(is_training)
 
         return recovered_sample
+
+    def decodable(self) -> bool:
+        """
+        :return: Returns true if this view has a decoder attached
+        """
+        return self.decoder is not None
+
+    def get_id(self) -> str:
+        """
+        Returns the ID for the given view
+        """
+        return self.view_id
 
 
 class WrapperModel(nn.Module):
@@ -144,6 +165,51 @@ class CMCTrainer(Trainer):
     Differences to Trainer:
         - The dataloader is assumed to yield a list of views
     """
+    def __init__(self, *args, num_decodings_per_step: int = 0, **kwargs):
+        """
+        Sets up the CMCTrainer
+        :param args: Args for superclass
+        :param num_decodings_per_step: Number of encode-decode pairings to sample per step, default
+        is not to use decodings
+        :param kwargs: Keyword args for superclass
+        """
+        super(CMCTrainer, self).__init__(*args, **kwargs)
+
+        self.num_decodings = num_decodings_per_step
+        self.use_decoding_loss = num_decodings_per_step != 0
+
+        # Setup the view pairs
+        all_views = self.model.views
+        self.decodable_views = [view for view in all_views if view.decodable()]
+        self.encode_decode_pairs = list(product(all_views, self.decodable_views))
+
+    def decoding_loss(self, inputs: List[torch.Tensor], encodings: List[torch.Tensor]) -> torch.Tensor:
+        """
+        Samples decoding pathways and adds decoding loss to contrastive loss
+        :param inputs: The inputs to the CMC encoders
+        :param encodings: The encodings that were produced by the model
+        :return: A loss on the decodings sampled
+        """
+        # Sample decoding pathways
+        decodings = np.random.choice(self.encode_decode_pairs, size=self.num_decodings, replace=False)
+
+        # Perform all relevant decodings
+        decoding_loss = torch.Tensor([0]).to(util.get_project_device())
+
+        for encode_view_ind, decode_view_ind in decodings:
+            decoded_view = self.model.views[decode_view_ind]
+            decoded_view = decoded_view.decode(encodings[encode_view_ind])
+
+            reconstruction_loss = decoded_view.reconstruction_loss(decoded_view, inputs[decode_view_ind])
+
+            # Report this reconstruction loss
+            self.wandb_run.log({f"{self.model.views[encode_view_ind].get_id()} -> "
+                                f"{self.model.views[decode_view_ind].get_id()} Reconstruction Loss": reconstruction_loss})
+
+            decoding_loss += reconstruction_loss
+
+        return decoding_loss
+
     def train(self, epochs: int = 10, save_best: bool = True, save_to: str = None):
         """
         Overloads the training loop from the standard trainer to train via CMC
@@ -176,10 +242,15 @@ class CMCTrainer(Trainer):
                 core_view, positive_samples, negative_samples = get_positive_and_negative_samples(encodings, self.model)
                 loss_value = self.loss_function(core_view, positive_samples, negative_samples)
 
+                if self.use_decoding_loss:
+                    reconstruction_loss = self.decoding_loss(inputs, encodings)
+                    self.wandb_run.log({"Contrastive Loss": loss_value})
+                    loss_value += reconstruction_loss
+                else:
+                    self.wandb_run.log({"Contrastive Loss": loss_value})
+
                 # Backward pass
                 loss_value.backward()
-                self.wandb_run.log({"Train Loss": loss_value})
-
                 self.optimizer.step()
 
                 avg_loss += loss_value
