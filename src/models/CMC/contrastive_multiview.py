@@ -16,7 +16,6 @@ from losses.cmc_losses import get_cmc_loss_on_dataloader, get_positive_and_negat
 
 T = TypeVar("T")
 
-
 class View:
     """
     An abstract container for a view with encoder, and possible decoder
@@ -237,9 +236,16 @@ class FeatureExtractor(nn.Module):
 
 
 
-if __name__ == "__main__":
-    fe1 = FeatureExtractor()
-    fe2 = FeatureExtractor()
+if __name__ == "__main__":    
+    from models.CMC.ResNetEncoder import ResNetEncoder
+    from models.CMC.Decoder import Decoder
+    
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    fe1 = ResNetEncoder(device, latent_dim=1000)
+    fe2 = ResNetEncoder(device, latent_dim=1000)
+    de1 = Decoder(100, 100, 1000, 5)
+    de2 = Decoder(100, 100, 1000, 5)
+
 
     base_data = datasets.CIFAR10("../data", transform=Compose([ToTensor()]))
     noisy_view = get_noisy_view()
@@ -257,7 +263,7 @@ if __name__ == "__main__":
     from losses.cmc_losses import contrastive_loss
     from models.CMC.contrastive_multiview import CMCTrainer, View, WrapperModel
 
-    view1, view2 = View(fe1), View(fe2)
+    view1, view2 = View(fe1, de1), View(fe2, de2)
     model = WrapperModel([view1, view2], 512)
 
     trainer = CMCTrainer(model, contrastive_loss, train_loader, validation_data=valid_loader)
