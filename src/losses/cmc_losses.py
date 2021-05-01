@@ -6,6 +6,7 @@ Reference paper: https://arxiv.org/pdf/1906.05849.pdf
 import torch
 
 import torch.nn as nn
+import utils.util as util
 
 from typing import Callable, Tuple, List
 from torch.utils.data import DataLoader
@@ -36,7 +37,7 @@ def get_positive_and_negative_samples(encodings: List[torch.Tensor], model: nn.M
     core_views = core_views.unsqueeze(1)
 
     # Sample a view for each core view to contrast with
-    positive_views_indices = torch.randint(1, len(encodings), (batch_size,))
+    positive_views_indices = torch.randint(1, num_views, (batch_size,))
     positive_views = torch.cat([
         encodings[positive_views_indices[i]][i].unsqueeze(0) for i in range(batch_size)
     ]).unsqueeze(1)
@@ -56,8 +57,8 @@ def get_cmc_loss_on_dataloader(model: nn.Module, dataloader: DataLoader, loss_fn
     :return: The loss function applied to the dataloader
     """
     # The device the model is on
-    device = next(model.parameters()).device
-    total_loss = torch.FloatTensor([0])
+    device = util.get_project_device()
+    total_loss = torch.FloatTensor([0]).to(device)
 
     # Get all the encodings
     for batch in dataloader:
@@ -95,5 +96,6 @@ def contrastive_loss(encoding: torch.Tensor, positive_sample: torch.Tensor,
     scores = torch.bmm(all_samples, torch.transpose(encoding, 1, 2)).squeeze(-1)
 
     # Compute the contrastive loss
-    targets = torch.zeros(scores.size()[0]).long()
+    targets = torch.zeros(scores.size()[0]).long().to(util.get_project_device())
+
     return cross_entropy(scores, targets)

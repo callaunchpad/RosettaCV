@@ -8,6 +8,27 @@ import torch.nn as nn
 from torch.utils.data.dataloader import DataLoader
 from typing import Callable
 
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+def get_project_device() -> torch.device:
+    """
+    Gets the project device
+    :return: the project device
+    """
+    global DEVICE
+
+    return DEVICE
+
+
+def set_project_device(device: torch.device) -> None:
+    """
+    Sets the project device
+    :param device: The device to use for running the model
+    :return: None
+    """
+    global DEVICE
+    DEVICE = device
+
 
 def get_loss_on_dataloader(model: nn.Module, data_loader: DataLoader, loss_fn: Callable) -> torch.Tensor:
     """
