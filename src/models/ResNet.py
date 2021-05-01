@@ -135,6 +135,7 @@ class ResNetEncoder(nn.Module):
         super().__init__()
         self.block_sizes = block_sizes
         self.stoch_depth_p = args.get('stoch_depth_p', 0.0)
+        self._mask_blocks()
         
         self.gate = nn.Sequential(
             nn.Conv2d(in_channels, self.block_sizes[0], kernel_size=7, stride=2, padding=3, bias=False),
@@ -152,12 +153,16 @@ class ResNetEncoder(nn.Module):
                           block=block, *args, **kwargs) 
               for (in_channels, out_channels), n in zip(self.in_out_block_sizes, depths[1:])]
         ])
-        
+
+    def _mask_blocks(self):
+        self.use_block = torch.rand(len(self.blocks),) > self.stoch_depth_p
         
     def forward(self, x):
         x = self.gate(x)
-        for block in self.blocks:
-            if torch.rand(1,).item() > self.stoch_depth_p:
+        # can take this out and modify if we want to switch blocks less frequently
+        self._mask_blocks()
+        for i, block in enumerate(self.blocks):
+            if self.use_block[i] > self.stoch_depth_p:
                 x = block(x)
         return x
 

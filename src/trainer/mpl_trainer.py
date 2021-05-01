@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from datetime import datetime
+from utils import augmentations
+
 
 import wandb
 
@@ -15,7 +17,17 @@ NOTE: Expects dl to have batch size of 1 for unlabeled and labeled data
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-def train_mpl(teacher_model, student_model, unlabeled_dl, labeled_dl, batch_size, dataset, num_epochs=10, learning_rate=1e-3, weight_u=1, save_model=False):
+def train_mpl(teacher_model,
+              student_model,
+              unlabeled_dl,
+              labeled_dl,
+              batch_size,
+              dataset,
+              num_epochs=10,
+              learning_rate=1e-3,
+              weight_u=1,
+              n_student_steps=1,
+              save_model=False):
     # Setup wandb
     config = wandb.config
     config.num_epochs = num_epochs
@@ -31,6 +43,8 @@ def train_mpl(teacher_model, student_model, unlabeled_dl, labeled_dl, batch_size
 
     num_labeled = len(labeled_dl)
     num_unlabeled = len(unlabeled_dl)
+
+    augmenter = augmentations.TransformMPL()
 
     if num_labeled <= num_unlabeled:
         num_iter = num_labeled
@@ -73,14 +87,16 @@ def train_mpl(teacher_model, student_model, unlabeled_dl, labeled_dl, batch_size
                 s_l_loss_1 = F.cross_entropy(s_logits_l, label) # cross_entropy interally takes the averagee
 
                 # 3) generate pseudo labels from teacher
-                mpl_image_u = teacher_model(image_u)
-                soft_mpl_image_u = torch.softmax(mpl_image_u.detach(), dim=-1) # don't propogate gradients into teacher so use .detach()
+                for _ in range(n_student_steps):
+                    mpl_image_u = teacher_model(image_u)
+                    soft_mpl_image_u = torch.softmax(mpl_image_u.detach(), dim=-1) # don't propogate gradients into teacher so use .detach()
 
-                # 4) pass unlabeled through student, calculate gradients, and optimize student
-                s_logits_u = student_model(image_u)
-                s_mpl_loss = F.binary_cross_entropy_with_logits(s_logits_u, soft_mpl_image_u.detach())
-                s_mpl_loss.backward() # calculate gradients for student network
-                s_optimizer.step() # step in the direction of gradients for student network
+                    # 4) pass unlabeled through student, calculate gradients, and optimize student
+                    s_logits_u = student_model(image_u)
+                    s_mpl_loss = F.binary_cross_entropy_with_logits(s_logits_u, soft_mpl_image_u.detach())
+                    s_mpl_loss.backward() # calculate gradients for student network
+                    s_optimizer.step() # step in the direction of gradients for student network
+                    s_optimizer.zero_grad()
                 # We will clear out gradients at the end
 
                 # 5) pass labeled data through updated student and save the loss
@@ -95,11 +111,20 @@ def train_mpl(teacher_model, student_model, unlabeled_dl, labeled_dl, batch_size
                 # with hard labels, use log softmax trick from REINFORCE to compute gradients which we then scale with the dot product
                 # http://stillbreeze.github.io/REINFORCE-vs-Reparameterization-trick/
                 # with soft labels, I have no idea how we can propogate the gradients into the teacher so I use hard labels here
-                _, hard_pseudo_label = torch.max(mpl_image_u.detach(), dim=-1)
+                max_probs, hard_pseudo_label = torch.max(mpl_image_u.detach(), dim=-1)
                 t_mpl_loss = dot_product * F.cross_entropy(mpl_image_u, hard_pseudo_label)
 
+                # 6) calculate unsupervised distribution alignment (UDA) loss of teacher on unlabeled images
+                image_u_aug = augmenter(image_u)
+                t_logits_image_u_aug = teacher_model(image_u_aug)
+                uda_loss_mask = (max_probs >= uda_threshold).float()
+                t_uda_loss = torch.mean(
+                    -(soft_mpl_image_u*torch.log_softmax(t_logits_image_u_aug, dim=-1)).sum(dim=-1)*uda_loss_mask
+                )
+
                 # 6) calculate teacher loss and optimizer teacher
-                t_loss = t_l_loss + (weight_u * t_mpl_loss)
+                t_u_loss = t_mpl_loss + t_uda_loss
+                t_loss = t_l_loss + (weight_u * t_u_loss)
                 t_loss.backward()
                 # DEBUG: print(teacher_model.encoder.gate[0].weight.grad) # verify that the teacher has a gradient
                 t_optimizer.step()

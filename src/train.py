@@ -23,6 +23,15 @@ print('[*] Training on ' + device)
 
 mode = 'mpl'
 
+BATCH_SIZE = 256
+DATASET = 'imagenet'
+N_EPOCHS = 3
+LR = 1e-2
+WEIGHT_U = 1.5
+UDA_THRESHOLD = 0.95
+N_STUDENT_STEPS = 1
+STOCH_DEPTH_P = 0.1
+
 if mode == 'denoisingae':
     #r_noise = [0.10, 0.15, 0.20, 0.30, 0.40]
     r_noise = [0.40]
@@ -74,8 +83,32 @@ elif mode == 'mpl':
     student_model = resnet34(in_channels=3, n_classes=1000).to(device)
     student_model = nn.DataParallel(student_model, device_ids=[0, 1])
 
+    """
     with wandb.init(project="MPL-ImageNet"):
-        train_mpl(teacher_model, student_model, train_dl, val_dl, batch_size, 'imagenet', num_epochs=3, learning_rate=1e-2, weight_u=1.5, save_model=True)
+        train_mpl(teacher_model,
+                  student_model,
+                  train_dl,
+                  val_dl,
+                  batch_size,
+                  'imagenet',
+                  num_epochs=3,
+                  learning_rate=1e-2,
+                  weight_u=1.5,
+                  uda_threshold=0.95,
+                  save_model=True)
+    """
+    train_mpl(teacher_model,
+                student_model,
+                train_dl,
+                val_dl,
+                batch_size=BATCH_SIZE,
+                dataset=DATASET,
+                num_epochs=N_EPOCHS,
+                learning_rate=LR,
+                weight_u=WEIGHT_U,
+                uda_threshold=UDA_THRESHOLD,
+                n_student_steps=N_STUDENT_STEPS,
+                save_model=SAVE_MODEL)
 
 def train_denoisingae(model, model_size, dataset, num_epochs=10, batch_size=32, learning_rate=1e-3, random_noise=0.15, save_model=False):
     # setup wandb config
