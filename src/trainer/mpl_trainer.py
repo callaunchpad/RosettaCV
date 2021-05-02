@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from datetime import datetime
 from utils import augmentations
+import pdb
 
 
 import wandb
@@ -25,6 +26,7 @@ def train_mpl(teacher_model,
               dataset,
               num_epochs=10,
               learning_rate=1e-3,
+              uda_threshold=1.0,
               weight_u=1,
               n_student_steps=1,
               t_optimizer=None,
@@ -36,6 +38,14 @@ def train_mpl(teacher_model,
     config.num_epochs = num_epochs
     config.learning_rate = learning_rate
     config.batch_size = batch_size
+    config.update({
+        "num_epochs": num_epochs,
+        "batch_size": batch_size,
+        "uda_threshold": uda_threshold,
+        "weight_u": weight_u,
+        "n_student_steps": n_student_steps,
+    })
+    # pdb.set_trace()
 
     # Setup definitions
     if not t_optimizer:
@@ -49,8 +59,6 @@ def train_mpl(teacher_model,
     num_labeled = len(labeled_dl)
     num_unlabeled = len(unlabeled_dl)
 
-    augmenter = augmentations.TransformMPL()
-
     if num_labeled <= num_unlabeled:
         num_iter = num_labeled
 
@@ -63,14 +71,17 @@ def train_mpl(teacher_model,
             running_student_loss = 0.0
             labeled_iter = iter(labeled_dl)
             unlabeled_iter = iter(unlabeled_dl)
+            
+            # pdb.set_trace()
 
             for i in range(num_iter):
                 # We get one unlabeled image and one labeled image batch
                 image_l, label = next(labeled_iter)
-                image_u, _ = next(unlabeled_iter)
+                images_u, _ = next(unlabeled_iter)
 
                 image_l = image_l / 255
-                image_u = image_u / 255
+                # images_u = image_u / 255
+                image_u, image_u_aug = images_u
 
                 # 0) resize image to what PyTorch wants and convert to device
                 if dataset == 'fashion_mnist':
@@ -97,7 +108,7 @@ def train_mpl(teacher_model,
                 # 3) generate pseudo labels from teacher
                 for _ in range(n_student_steps):
                     mpl_image_u = teacher_model(image_u)
-                    soft_mpl_image_u = torch.softmax(mpl_image_u.detach(), dim=-1) # don't propogate gradients into teacher so use .detach()
+                    soft_mpl_image_u = torch.softmax(mpl_image_u.detach(), dim=-1) # don't propagate gradients into teacher so use .detach()
 
                     # 4) pass unlabeled through student, calculate gradients, and optimize student
                     s_logits_u = student_model(image_u)
@@ -123,7 +134,6 @@ def train_mpl(teacher_model,
                 t_mpl_loss = dot_product * F.cross_entropy(mpl_image_u, hard_pseudo_label)
 
                 # 6) calculate unsupervised distribution alignment (UDA) loss of teacher on unlabeled images
-                image_u_aug = augmenter(image_u)
                 t_logits_image_u_aug = teacher_model(image_u_aug)
                 uda_loss_mask = (max_probs >= uda_threshold).float()
                 t_uda_loss = torch.mean(
@@ -163,7 +173,11 @@ def train_mpl(teacher_model,
                 'teacher_model': teacher_model.state_dict(),
                 'student_model': student_model.state_dict()
             }
-            torch.save(checkpoint, 'trained_models/' + dataset + '/mpl/' + version + '-checkpoint-' + str(num_epochs) + '-' + datetime.now().strftime('%m-%d') + '.pt')
+            out_dir = f"~/RosettaCV/src/trained_models/{dataset}/mpl/"
+            filename =f"{version}-checkpoint-{str(num_epochs)}-{datetime.now().strftime('%m-%d')}.pt"
+            os.makedirs(out_dir, exist_ok=True)
+            torch.save(checkpoint, os.path.join(out_dir, filename))
+
 
     else:
         print('[!] More labeled data than unlabeled')

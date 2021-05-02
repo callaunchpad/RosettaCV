@@ -6,13 +6,16 @@ import random
 import PIL, PIL.ImageOps, PIL.ImageEnhance, PIL.ImageDraw
 import numpy as np
 import torch
+from torchvision import transforms
 from PIL import Image
 
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
+CIFAR10_MEAN = (0.4914, 0.4822, 0.4465)
+CIFAR10_STD = (0.2471, 0.2435, 0.2616)
 
 class TransformMPL(object):
-    def __init__(self, randaug=(2, 10), resize=32, mean, std):
+    def __init__(self, randaug=(2, 10), resize=32, mean=CIFAR10_MEAN, std=CIFAR10_STD):
         n, m = randaug
 
         self.ori = transforms.Compose([

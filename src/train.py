@@ -6,33 +6,37 @@ from torchvision.datasets import ImageFolder, CIFAR10
 import torchvision.models as torch_models
 from torch.utils.data import Dataset, DataLoader, random_split
 import wandb
+from copy import copy
 from datetime import datetime
 
 import matplotlib.pyplot as plt
 
 from models.DenoisingAE import EncoderSm, DecoderSm, EncoderMd, DecoderMd, EncoderLg, DecoderLg, DenoisingAE
-from models.ResNet import resnet50
+from models.ResNet import resnet50, resnet34
 from models.CNN import CNN
 from data_loader.data_loaders import FashionMnistDenoising, ImageNetDenoising, FashionMnistDataset
 from data_loader.few_shot_dataloaders import get_few_shot_dataloader
 from trainer.mpl_trainer import train_mpl
 from trainer.trainer import Trainer
+from utils.augmentations import *
+import pdb
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 torch.manual_seed(7)
 
 print('[*] Training on ' + device)
 
-mode = 'finetune'
+mode = 'mpl'
 
 BATCH_SIZE = 256
-DATASET = 'imagenet'
+DATASET = 'cifar'
 N_EPOCHS = 3
-LR = 1e-2
+LR = 1e-4
 WEIGHT_U = 1.5
-UDA_THRESHOLD = 0.95
+UDA_THRESHOLD = 0.6
 N_STUDENT_STEPS = 1
 STOCH_DEPTH_P = 0.1
+SAVE_MODEL=True
 
 def train_cifar(model, num_epochs=50, batch_size=32, version='v1', save_model=False, optimizer=None):
     cifar10_dataset = CIFAR10(root="/datasets", download=True, transform=transforms.ToTensor())
@@ -202,20 +206,27 @@ elif mode == 'mpl':
     print('[*] Training MPL on Cifar10')
     batch_size = 32
 
-    cifar10_dataset = CIFAR10(root="/datasets", download=True, transform=transforms.ToTensor())
+    cifar10_dataset = CIFAR10(root="/datasets", download=True)
     lengths = [int(len(cifar10_dataset)*0.6), len(cifar10_dataset) - int(len(cifar10_dataset)*0.6)]
     split_train_dataset, split_val_dataset = random_split(cifar10_dataset, lengths)
+    split_train_dataset.dataset = copy(cifar10_dataset)
+    split_train_dataset.dataset.transform = TransformMPL()
+    split_val_dataset.dataset.transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(mean=CIFAR10_MEAN, std=CIFAR10_STD)
+    ])
     train_dl = DataLoader(dataset=split_train_dataset, batch_size=batch_size, shuffle=True)
     val_dl = DataLoader(dataset=split_val_dataset, batch_size=batch_size, shuffle=True)
 
-    checkpoint = torch.load('./trained_models/cifar10/mpl/v3-checkpoint-25-04-25.pt')
+    # pdb.set_trace()
 
-    '''
+    # checkpoint = torch.load('./trained_models/cifar10/mpl/v3-checkpoint-25-04-25.pt')
+    
     # train teacher model from scratch
     teacher_model = resnet34(in_channels=3, n_classes=100).to(device)
     teacher_model = nn.DataParallel(teacher_model, device_ids=[0, 1])
     #teacher_model.load_state_dict(checkpoint['teacher_model'])
-    '''
+    
     # train teacher model from pretrained resnet
     teacher_model = torch_models.resnet34(pretrained=True)
     teacher_model.fc = nn.Linear(512, 10)
@@ -228,34 +239,30 @@ elif mode == 'mpl':
                 param.requires_grad = False
     teacher_model = teacher_model.to(device)
     teacher_model = nn.DataParallel(teacher_model, device_ids=[0, 1])
-    teacher_model.load_state_dict(checkpoint['teacher_model'])
+    # teacher_model.load_state_dict(checkpoint['teacher_model'])
 
     student_model = resnet50(in_channels=3, n_classes=10).to(device)
     student_model = nn.DataParallel(student_model, device_ids=[0, 1])
-    student_model.load_state_dict(checkpoint['student_model'])
+    # student_model.load_state_dict(checkpoint['student_model'])
 
     t_optimizer = torch.optim.Adam(teacher_model.parameters(), lr=1e-4, weight_decay=1e-5)
-    t_optimizer.load_state_dict(checkpoint['t_optimizer'])
+    # t_optimizer.load_state_dict(checkpoint['t_optimizer'])
     s_optimizer = torch.optim.Adam(student_model.parameters(), lr=1e-4, weight_decay=1e-5)
-    s_optimizer.load_state_dict(checkpoint['s_optimizer'])
+    # s_optimizer.load_state_dict(checkpoint['s_optimizer'])
 
     with wandb.init(project="MPL-Cifar10"):
-        # train_mpl(teacher_model, student_model, train_dl, val_dl, batch_size, 'cifar10', num_epochs=25, learning_rate=1e-2, 
-        #     weight_u=1.5, save_model=True, t_optimizer=t_optimizer, s_optimizer=s_optimizer, version="v4")
-
-
         train_mpl(teacher_model,
-                    student_model,
-                    train_dl,
-                    val_dl,
-                    batch_size=BATCH_SIZE,
-                    dataset=DATASET,
-                    num_epochs=N_EPOCHS,
-                    learning_rate=LR,
-                    weight_u=WEIGHT_U,
-                    uda_threshold=UDA_THRESHOLD,
-                    n_student_steps=N_STUDENT_STEPS,
-                    save_model=SAVE_MODEL)
+                        student_model,
+                        train_dl,
+                        val_dl,
+                        batch_size=BATCH_SIZE,
+                        dataset=DATASET,
+                        num_epochs=N_EPOCHS,
+                        learning_rate=LR,
+                        weight_u=WEIGHT_U,
+                        uda_threshold=UDA_THRESHOLD,
+                        n_student_steps=N_STUDENT_STEPS,
+                        save_model=SAVE_MODEL)
 
 elif mode == 'baseline':
     print('[*] Training ResNet50 on Cifar10')
