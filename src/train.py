@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import transforms
-from torchvision.datasets import ImageFolder, CIFAR10
+from torchvision.datasets import ImageFolder, CIFAR10, CIFAR100
 import torchvision.models as torch_models
 from torch.utils.data import Dataset, DataLoader, random_split
 import wandb
@@ -30,13 +30,14 @@ mode = 'mpl'
 
 BATCH_SIZE = 256
 DATASET = 'cifar'
-N_EPOCHS = 3
+N_EPOCHS = 1
 LR = 1e-4
 WEIGHT_U = 1.5
 UDA_THRESHOLD = 0.6
 N_STUDENT_STEPS = 1
 STOCH_DEPTH_P = 0.1
-SAVE_MODEL=True
+SAVE_MODEL = True
+MODEL_SAVE_DIR = f"/home/sean.obrien/RosettaCV/src/trained_models/{DATASET}/mpl/"
 
 def train_cifar(model, num_epochs=50, batch_size=32, version='v1', save_model=False, optimizer=None):
     cifar10_dataset = CIFAR10(root="/datasets", download=True, transform=transforms.ToTensor())
@@ -206,23 +207,14 @@ elif mode == 'mpl':
     print('[*] Training MPL on Cifar10')
     batch_size = 32
 
-    cifar10_dataset = CIFAR10(root="/datasets", download=True)
-    lengths = [int(len(cifar10_dataset)*0.6), len(cifar10_dataset) - int(len(cifar10_dataset)*0.6)]
-    split_train_dataset, split_val_dataset = random_split(cifar10_dataset, lengths)
-    split_train_dataset.dataset = copy(cifar10_dataset)
-    split_train_dataset.dataset.transform = TransformMPL()
-    split_val_dataset.dataset.transform = transforms.Compose([
+    cifar10_dataset = CIFAR10(root="/datasets", download=True, transform=transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize(mean=CIFAR10_MEAN, std=CIFAR10_STD)
-    ])
-    train_dl = DataLoader(dataset=split_train_dataset, batch_size=batch_size, shuffle=True)
-    val_dl = DataLoader(dataset=split_val_dataset, batch_size=batch_size, shuffle=True)
+    ]))
+    cifar100_dataset = CIFAR100(root="/datasets", download=True, transform=TransformMPL())
+    sup_dl = DataLoader(dataset=cifar10_dataset, batch_size=batch_size, shuffle=True)
+    unsup_dl = DataLoader(dataset=cifar100_dataset, batch_size=batch_size, shuffle=True)
 
-<<<<<<< HEAD
-    # pdb.set_trace()
-
-=======
->>>>>>> 63f895059c0876c323163f7a95ade29c2487522a
     # checkpoint = torch.load('./trained_models/cifar10/mpl/v3-checkpoint-25-04-25.pt')
     
     # train teacher model from scratch
@@ -243,7 +235,6 @@ elif mode == 'mpl':
     teacher_model = teacher_model.to(device)
     teacher_model = nn.DataParallel(teacher_model, device_ids=[0, 1])
     # teacher_model.load_state_dict(checkpoint['teacher_model'])
-    teacher_model.load_state_dict(checkpoint['teacher_model'])
 
     student_model = resnet50(in_channels=3, n_classes=10).to(device)
     student_model = nn.DataParallel(student_model, device_ids=[0, 1])
@@ -257,8 +248,8 @@ elif mode == 'mpl':
     with wandb.init(project="MPL-Cifar10"):
         train_mpl(teacher_model,
                         student_model,
-                        train_dl,
-                        val_dl,
+                        sup_dl,
+                        unsup_dl,
                         batch_size=BATCH_SIZE,
                         dataset=DATASET,
                         num_epochs=N_EPOCHS,
@@ -266,7 +257,7 @@ elif mode == 'mpl':
                         weight_u=WEIGHT_U,
                         uda_threshold=UDA_THRESHOLD,
                         n_student_steps=N_STUDENT_STEPS,
-                        save_model=SAVE_MODEL)
+                        model_save_dir=MODEL_SAVE_DIR)
 elif mode == 'baseline':
     print('[*] Training ResNet50 on Cifar10')
 
