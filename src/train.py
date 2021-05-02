@@ -23,12 +23,12 @@ torch.manual_seed(7)
 
 print('[*] Training on ' + device)
 
-mode = 'finetune'
+mode = 'mpl'
 
 BATCH_SIZE = 256
-DATASET = 'imagenet'
+DATASET = 'cifar'
 N_EPOCHS = 3
-LR = 1e-2
+LR = 1e-4
 WEIGHT_U = 1.5
 UDA_THRESHOLD = 0.95
 N_STUDENT_STEPS = 1
@@ -208,14 +208,13 @@ elif mode == 'mpl':
     train_dl = DataLoader(dataset=split_train_dataset, batch_size=batch_size, shuffle=True)
     val_dl = DataLoader(dataset=split_val_dataset, batch_size=batch_size, shuffle=True)
 
-    checkpoint = torch.load('./trained_models/cifar10/mpl/v3-checkpoint-25-04-25.pt')
-
-    '''
+    # checkpoint = torch.load('./trained_models/cifar10/mpl/v3-checkpoint-25-04-25.pt')
+    
     # train teacher model from scratch
     teacher_model = resnet34(in_channels=3, n_classes=100).to(device)
     teacher_model = nn.DataParallel(teacher_model, device_ids=[0, 1])
     #teacher_model.load_state_dict(checkpoint['teacher_model'])
-    '''
+    
     # train teacher model from pretrained resnet
     teacher_model = torch_models.resnet34(pretrained=True)
     teacher_model.fc = nn.Linear(512, 10)
@@ -226,25 +225,23 @@ elif mode == 'mpl':
         if ct < 7:
             for param in child.parameters():
                 param.requires_grad = False
+    """
     teacher_model = teacher_model.to(device)
     teacher_model = nn.DataParallel(teacher_model, device_ids=[0, 1])
     teacher_model.load_state_dict(checkpoint['teacher_model'])
+    """
 
     student_model = resnet50(in_channels=3, n_classes=10).to(device)
     student_model = nn.DataParallel(student_model, device_ids=[0, 1])
-    student_model.load_state_dict(checkpoint['student_model'])
+    # student_model.load_state_dict(checkpoint['student_model'])
 
     t_optimizer = torch.optim.Adam(teacher_model.parameters(), lr=1e-4, weight_decay=1e-5)
-    t_optimizer.load_state_dict(checkpoint['t_optimizer'])
+    # t_optimizer.load_state_dict(checkpoint['t_optimizer'])
     s_optimizer = torch.optim.Adam(student_model.parameters(), lr=1e-4, weight_decay=1e-5)
-    s_optimizer.load_state_dict(checkpoint['s_optimizer'])
+    # s_optimizer.load_state_dict(checkpoint['s_optimizer'])
 
-    with wandb.init(project="MPL-Cifar10"):
-        # train_mpl(teacher_model, student_model, train_dl, val_dl, batch_size, 'cifar10', num_epochs=25, learning_rate=1e-2, 
-        #     weight_u=1.5, save_model=True, t_optimizer=t_optimizer, s_optimizer=s_optimizer, version="v4")
-
-
-        train_mpl(teacher_model,
+    # with wandb.init(project="MPL-Cifar10"):
+    train_mpl(teacher_model,
                     student_model,
                     train_dl,
                     val_dl,
