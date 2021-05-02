@@ -27,6 +27,9 @@ def train_mpl(teacher_model,
               learning_rate=1e-3,
               weight_u=1,
               n_student_steps=1,
+              t_optimizer=None,
+              s_optimizer=None,
+              version='v1',
               save_model=False):
     # Setup wandb
     config = wandb.config
@@ -35,8 +38,10 @@ def train_mpl(teacher_model,
     config.batch_size = batch_size
 
     # Setup definitions
-    t_optimizer = torch.optim.Adam(teacher_model.parameters(), lr=learning_rate, weight_decay=1e-5)
-    s_optimizer = torch.optim.Adam(student_model.parameters(), lr=learning_rate, weight_decay=1e-5)
+    if not t_optimizer:
+        t_optimizer = torch.optim.Adam(teacher_model.parameters(), lr=learning_rate, weight_decay=1e-5)
+    if not s_optimizer:
+        s_optimizer = torch.optim.Adam(student_model.parameters(), lr=learning_rate, weight_decay=1e-5)
 
     teacher_model.train()
     student_model.train()
@@ -74,7 +79,10 @@ def train_mpl(teacher_model,
                 elif dataset == 'imagenet':
                     image_l = image_l.view(-1, 3, 224, 224).to(device)
                     image_u = image_u.view(-1, 3, 224, 224).to(device)
-                
+                elif dataset == 'cifar10':
+                    image_l = image_l.view(-1, 3, 32, 32).to(device)
+                    image_u = image_u.view(-1, 3, 32, 32).to(device)
+
                 label = label.type(torch.LongTensor).to(device)
 
                 # 1) pass labeled image through teacher and save the loss for future backprop
@@ -84,7 +92,7 @@ def train_mpl(teacher_model,
                 # 2) pass labeled image through student and save the loss
                 with torch.no_grad(): # we don't want to update student
                     s_logits_l = student_model(image_l)
-                s_l_loss_1 = F.cross_entropy(s_logits_l, label) # cross_entropy interally takes the averagee
+                s_l_loss_1 = F.cross_entropy(s_logits_l, label) # cross_entropy interally takes the average
 
                 # 3) generate pseudo labels from teacher
                 for _ in range(n_student_steps):
@@ -155,7 +163,7 @@ def train_mpl(teacher_model,
                 'teacher_model': teacher_model.state_dict(),
                 'student_model': student_model.state_dict()
             }
-            torch.save(checkpoint, 'trained_models/' + dataset + '/mpl/v2-checkpoint-' + str(num_epochs) + '-' + datetime.now().strftime('%m-%d') + '.pt')
+            torch.save(checkpoint, 'trained_models/' + dataset + '/mpl/' + version + '-checkpoint-' + str(num_epochs) + '-' + datetime.now().strftime('%m-%d') + '.pt')
 
     else:
         print('[!] More labeled data than unlabeled')

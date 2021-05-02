@@ -59,6 +59,48 @@ class ImageNetDenoising(ImageNetTask):
     def loss_fn(self):
         return torch.nn.MSELoss()
 
+
+class MiniImageNetTask(Task):
+
+    transform = transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.ToTensor()
+    ])
+
+    def loader(self, train: bool, **kwargs):
+        """
+        train: true for train dataset, false for test dataset
+        kwargs: DataLoader arguments (eg. batch_size)
+        """
+        if 'batch_size' in kwargs:
+            self.batch_size = kwargs.pop('batch_size')
+        else:
+            self.batch_size = 32
+
+        # transform = transforms.Compose([transforms.ToTensor(),
+        #                         transforms.Normalize((0.1307,), (0.3081,)),
+        #                         ])
+
+        # lengths = [int(len(data_set)*0.8), int(len(data_set)*0.2)]
+        # train_set, val_set = random_split(data_set, lengths)
+
+        if train:
+            return torch.utils.data.DataLoader(ImageFolder('/datasets/imagenetwhole/imagenet-1000/train/',
+                                                           transform=self.transform), shuffle=True, batch_size=self.batch_size, **kwargs)
+        else:
+            return torch.utils.data.DataLoader(ImageFolder('/datasets/imagenetwhole/imagenet-1000/val/',
+                                                           transform=self.transform), shuffle=True, batch_size=self.batch_size, **kwargs)
+
+class MiniImageNetClass(MiniImageNetTask):
+    def loss_fn(self):
+        return torch.nn.CrossEntropyLoss()
+
+class MiniImageNetDenoising(MiniImageNetTask):
+    def loss_fn(self):
+        return torch.nn.MSELoss()
+
+
 class OmniglotTask(Task):
     def loader(self, train: bool, **kwargs):
         """
