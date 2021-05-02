@@ -218,8 +218,11 @@ elif mode == 'mpl':
     train_dl = DataLoader(dataset=split_train_dataset, batch_size=batch_size, shuffle=True)
     val_dl = DataLoader(dataset=split_val_dataset, batch_size=batch_size, shuffle=True)
 
+<<<<<<< HEAD
     # pdb.set_trace()
 
+=======
+>>>>>>> 63f895059c0876c323163f7a95ade29c2487522a
     # checkpoint = torch.load('./trained_models/cifar10/mpl/v3-checkpoint-25-04-25.pt')
     
     # train teacher model from scratch
@@ -240,6 +243,7 @@ elif mode == 'mpl':
     teacher_model = teacher_model.to(device)
     teacher_model = nn.DataParallel(teacher_model, device_ids=[0, 1])
     # teacher_model.load_state_dict(checkpoint['teacher_model'])
+    teacher_model.load_state_dict(checkpoint['teacher_model'])
 
     student_model = resnet50(in_channels=3, n_classes=10).to(device)
     student_model = nn.DataParallel(student_model, device_ids=[0, 1])
@@ -263,7 +267,6 @@ elif mode == 'mpl':
                         uda_threshold=UDA_THRESHOLD,
                         n_student_steps=N_STUDENT_STEPS,
                         save_model=SAVE_MODEL)
-
 elif mode == 'baseline':
     print('[*] Training ResNet50 on Cifar10')
 

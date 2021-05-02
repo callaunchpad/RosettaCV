@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from datetime import datetime
 from utils import augmentations
-import pdb
+import os
 
 
 import wandb
@@ -34,10 +34,6 @@ def train_mpl(teacher_model,
               version='v1',
               save_model=False):
     # Setup wandb
-    config = wandb.config
-    config.num_epochs = num_epochs
-    config.learning_rate = learning_rate
-    config.batch_size = batch_size
     config.update({
         "num_epochs": num_epochs,
         "batch_size": batch_size,
@@ -45,7 +41,6 @@ def train_mpl(teacher_model,
         "weight_u": weight_u,
         "n_student_steps": n_student_steps,
     })
-    # pdb.set_trace()
 
     # Setup definitions
     if not t_optimizer:
@@ -160,11 +155,11 @@ def train_mpl(teacher_model,
                 if global_step % 100 == 0:
                     print('Epoch:{} Batch:{}/{} Teacher Loss:{:.4f} Student Loss:{:.4f}'.format(epoch+1, batch_num, total_batches, 
                         t_loss.item(), s_l_loss_2.item()))
-                    wandb.log({ 'batch_teacher_loss': t_loss.item(), 'batch_student_loss': s_l_loss_2.item() })
+                    # wandb.log({ 'batch_teacher_loss': t_loss.item(), 'batch_student_loss': s_l_loss_2.item() })
             
             # display information for each epoch
             print('Epoch:{} Teacher Loss:{:.4f} Student Loss:{:.4f}'.format(epoch+1, running_teacher_loss / num_iter, running_student_loss / num_iter))
-            wandb.log({ 'epoch': epoch + 1, 'teacher_loss': running_teacher_loss / num_iter, 'student_loss': running_student_loss / num_iter })
+            # wandb.log({ 'epoch': epoch + 1, 'teacher_loss': running_teacher_loss / num_iter, 'student_loss': running_student_loss / num_iter })
 
         if save_model:
             checkpoint = {
@@ -176,8 +171,7 @@ def train_mpl(teacher_model,
             out_dir = f"~/RosettaCV/src/trained_models/{dataset}/mpl/"
             filename =f"{version}-checkpoint-{str(num_epochs)}-{datetime.now().strftime('%m-%d')}.pt"
             os.makedirs(out_dir, exist_ok=True)
+            # torch.save(checkpoint, 'trained_models/' + dataset + '/mpl/' + version + '-checkpoint-' + str(num_epochs) + '-' + datetime.now().strftime('%m-%d') + '.pt')
             torch.save(checkpoint, os.path.join(out_dir, filename))
-
-
     else:
         print('[!] More labeled data than unlabeled')
