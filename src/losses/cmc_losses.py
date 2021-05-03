@@ -7,16 +7,18 @@ import torch
 
 import torch.nn as nn
 import utils.util as util
+import torch.nn.functional as F
 
-from typing import Callable, Tuple, List
+from typing import Callable, Tuple, List, Union
 from torch.utils.data import DataLoader
+from transformers import BertTokenizer
 
 """
-Constant cross_entropy method
+CONSTANTS 
 """
-cross_entropy = torch.nn.CrossEntropyLoss()
+PAD_TOKEN = 0
+tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 mse = torch.nn.MSELoss()
-
 
 
 def get_positive_and_negative_samples(encodings: List[torch.Tensor], model: nn.Module,
@@ -100,7 +102,29 @@ def contrastive_loss(encoding: torch.Tensor, positive_sample: torch.Tensor,
     # Compute the contrastive loss
     targets = torch.zeros(scores.size()[0]).long().to(util.get_project_device())
 
-    return cross_entropy(scores, targets)
+    return F.cross_entropy(scores, targets)
+
+
+def language_reconstruction_loss(predicted_logits: torch.Tensor, ground_truth_caption: Union[str, List]) -> torch.Tensor:
+    """
+    The language reconstruction loss, to compare a generated caption to a ground truth
+    :param predicted_logits: The logits over the vocabulary predicted by the language decoder model
+    :param ground_truth_caption: The actual caption for the image
+    :return: The cross entropy loss of the caption and the predicted values
+    """
+    # Tokenize the caption into BERT's vocabulary
+    if type(ground_truth_caption) == str:
+        ground_truth_tok = tokenizer.encode(ground_truth_caption, padding=True, return_tensors="pt")
+    else:
+        ground_truth_tok = tokenizer.batch_encode_plus(ground_truth_caption, padding=True, return_tensors="pt")['input_ids']
+
+    # Reshape ground truth and predicted
+    predicted_logits = predicted_logits.view(-1, predicted_logits.shape[-1])  # Shape[-1] is the vocab size
+    ground_truth_tok = ground_truth_tok.view(-1)
+
+    # Cross entropy ignoring locations that are padded
+    return F.cross_entropy(predicted_logits, ground_truth_tok, ignore_index=PAD_TOKEN)
+
 
 def l2_reconstruction_loss(decoded_view, inputs):
     return mse(decoded_view, inputs)

@@ -65,10 +65,11 @@ class View:
 
         return latent_encoding
 
-    def decode(self, latent_encoding: torch.Tensor, eval_mode: bool = False) -> torch.Tensor:
+    def decode(self, latent_encoding: torch.Tensor, label: torch.Tensor, eval_mode: bool = False) -> torch.Tensor:
         """
         Decodes the latent encoding back into this view
         :param latent_encoding: The latent encoding of the sample we're trying to recover
+        :param label: The label to decode to (for label aware decoding like BERT)
         :param eval_mode: Whether or not to track gradients/statistics or simply forward pass
         :return: The decoded latent space view of the sample
         """
@@ -81,7 +82,10 @@ class View:
         self.decoder.eval()
 
         with torch.no_grad():
-            recovered_sample = self.decoder(latent_encoding)
+            if hasattr(self.decoder, "needs_labels") and self.decoder.needs_labels:
+                recovered_sample = self.decoder(latent_encoding, label)
+            else:
+                recovered_sample = self.decoder(latent_encoding)
 
         self.encoder.train(is_training)
 
@@ -200,7 +204,9 @@ class CMCTrainer(Trainer):
 
         for encode_view_ind, decode_view_ind in decodings:
             decoded_view = self.model.views[decode_view_ind]
+
             decoded_view_out = decoded_view.decode(encodings[encode_view_ind])
+            # decoded_view = decoded_view.decode(encodings[encode_view_ind], inputs[decode_view_ind])
 
             reconstruction_loss = decoded_view.reconstruction_loss(decoded_view_out, inputs[decode_view_ind])
 

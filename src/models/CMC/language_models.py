@@ -3,9 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from transformers import BertTokenizer, BertModel, GPT2Config, PretrainedConfig, EncoderDecoderModel, GPT2Tokenizer
-from torch.nn import TransformerEncoder, TransformerEncoderLayer, TransformerDecoderLayer, TransformerDecoder
-from utils.nlp import TextToPositionalEncoding, rawToString
+from transformers import BertTokenizer, BertModel, BertLMHeadModel, BertConfig
 
 
 class TextEncoder(nn.Module):
@@ -24,7 +22,7 @@ class TextEncoder(nn.Module):
 
     def forward(self, x):
         # Tokenize the text
-        tokenized = torch.IntTensor(self.tokenizer(x, padding=True)['input_ids'])
+        tokenized = self.tokenizer(x, padding=True, return_tensors="pt")['input_ids']
 
         # Forward pass
         model_outputs = self.model(tokenized).last_hidden_state
@@ -40,27 +38,42 @@ class TextDecoder(nn.Module):
         super(TextDecoder, self).__init__()
 
         # Tokenizer
-        self.tokenizer = GPT2Tokenizer.from_pretrained("gpt")
+        self.tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 
-        # Define a GPT model as decoder
-        dummy_encoder = PretrainedConfig()
-        gpt_decoder = GPT2Config()
+        # Decoder model
+        config = BertConfig.from_pretrained("bert-base-uncased")
+        config.is_decoder = True
+        config.add_cross_attention = True
 
-        # Encoder decoder model
-        self.decoder_model = EncoderDecoderModel.from_encoder_decoder_pretrained(dummy_encoder, gpt_decoder)
+        self.decoder_model = BertLMHeadModel.from_pretrained("bert-base-uncased", config=config)
 
-        decoder_output_size = 512
+        decoder_input_size = 768
+        self.linear = nn.Linear(latent_dim, decoder_input_size)
 
-        self.linear = nn.Linear(decoder_output_size, latent_dim)
+        # Identifier to signal to the trainer to put the label in the decode call
+        self.needs_labels = True
 
     def forward(self, latent_encoding: torch.Tensor, decoder_inputs: torch.Tensor) -> torch.Tensor:
-        # Embed the decoder input
-        decoder_inputs = self.tokenizer(decoder_inputs)
-        decoding = self.decoder_model(decoder_input_ids=decoder_inputs, encoder_outputs=latent_encoding)
 
-        return F.relu(self.linear(decoding))
+        # Change dimension of the input to match cross-attention in BERT
+        latent_encoding = F.relu(self.linear(latent_encoding))
 
+        # Tokenize the inputs
+        decoder_inputs = self.tokenizer(decoder_inputs, return_tensors="pt", padding=True).input_ids
 
-if __name__ == "__main__":
-    te = TextEncoder(512)
-    print(te(["Testing one two there", "testing here here here here here here here"]).shape)
+        # Replicate the latent embedding to mimic an encoder output
+        sequence_length = decoder_inputs.size()[1]
+
+        latent_encoding = latent_encoding.unsqueeze(1)
+        encoder_output = torch.tile(latent_encoding, (1, sequence_length, 1))
+
+        # Generate logits for prediction
+        return self.decoder_model(decoder_inputs, encoder_hidden_states=encoder_output).logits
+
+    def generate(self, latent_encoding: torch.Tensor) -> str:
+        """
+        Generates a caption for the latent encoding
+        :param latent_encoding: The latent encoding to generate from
+        :return: The caption generated
+        """
+        raise NotImplementedError()  # TODO: Implement during evaluation stage
