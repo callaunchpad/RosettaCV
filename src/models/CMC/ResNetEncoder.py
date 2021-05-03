@@ -4,7 +4,7 @@ import torch
 
 
 class ResNetEncoder(nn.Module):
-    def __init__(self, device ='cpu', latent_dim=256):
+    def __init__(self, device ='cpu', latent_dim=512):
         super(ResNetEncoder, self).__init__()
         
         self.resnet18 = models.resnet18(pretrained=True)

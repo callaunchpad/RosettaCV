@@ -92,9 +92,6 @@ def contrastive_loss(encoding: torch.Tensor, positive_sample: torch.Tensor,
     assert len(negative_samples.size()) == 3, "Expecting negative sample shape: (N x K x D)"
 
     # Stack positive sample on top of negative
-    print("lol1", positive_sample.shape)
-    print("lol2", negative_samples.shape)
-
     all_samples = torch.cat([positive_sample, negative_samples], dim=1)
 
     # Compute the "critic" scores from 3.2 Implementing the Critic

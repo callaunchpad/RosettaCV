@@ -190,7 +190,7 @@ class CMCTrainer(Trainer):
         :return: A loss on the decodings sampled
         """
         # Sample decoding pathways
-        decodings = np.random.choice(self.encode_decode_pairs, size=self.num_decodings, replace=False)
+        decodings = random.sample(self.encode_decode_pairs, k=self.num_decodings)
 
         # Perform all relevant decodings
         decoding_loss = torch.Tensor([0]).to(util.get_project_device())
@@ -313,8 +313,8 @@ if __name__ == "__main__":
     from models.CMC.Decoder import Decoder
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    fe1 = ResNetEncoder(device, latent_dim=256)
-    fe2 = ResNetEncoder(device, latent_dim=256)
+    fe1 = ResNetEncoder(device, latent_dim=512)
+    fe2 = ResNetEncoder(device, latent_dim=512)
     de1 = Decoder(100, 100, 1000, 5)
     de2 = Decoder(100, 100, 1000, 5)
 
@@ -342,10 +342,10 @@ if __name__ == "__main__":
     from models.CMC.contrastive_multiview import CMCTrainer, View, WrapperModel
 
     view1, view2 = View(fe1, decoder=de1, reconstruction_loss=l2_reconstruction_loss), View(fe2, decoder=de2, reconstruction_loss=l2_reconstruction_loss)
-    view1, view2 = View(fe1, decoder=None, reconstruction_loss=None), View(fe2, decoder=None, reconstruction_loss=None)
+    # view1, view2 = View(fe1, decoder=None, reconstruction_loss=None), View(fe2, decoder=None, reconstruction_loss=None)
     model = WrapperModel([view1, view2], 512)
 
-    trainer = CMCTrainer(model, contrastive_loss, train_loader, validation_data=valid_loader)
+    trainer = CMCTrainer(model, contrastive_loss, train_loader, validation_data=valid_loader, num_decodings_per_step=1)
 
     trainer.train(500)
 
