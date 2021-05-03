@@ -50,6 +50,9 @@ class TextDecoder(nn.Module):
         decoder_input_size = 768
         self.linear = nn.Linear(latent_dim, decoder_input_size)
 
+        # Identifier to signal to the trainer to put the label in the decode call
+        self.needs_labels = True
+
     def forward(self, latent_encoding: torch.Tensor, decoder_inputs: torch.Tensor) -> torch.Tensor:
 
         # Change dimension of the input to match cross-attention in BERT
