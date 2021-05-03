@@ -1,22 +1,30 @@
 import torch.nn as nn
 import torchvision.models as models
+import torch
 
 
-class ResNetEncoder:
-    def __init__(self, device ='cpu', latent_dim=1000):
+class ResNetEncoder(nn.Module):
+    def __init__(self, device ='cpu', latent_dim=256):
         super(ResNetEncoder, self).__init__()
         
         self.resnet18 = models.resnet18(pretrained=True)
         modules = list(self.resnet18.children())[:-1]
-        modules += [nn.Linear(1000, latent_dim), nn.ReLU(), nn.Linear(latent_dim, latent_dim)] # TODO FIX BUG VERY BAD
         
         self.resnet18 = nn.Sequential(*modules).to(device)
+
+        self.l1 = nn.Linear(512, latent_dim)
+        self.r1 = nn.ReLU()
+        self.l2 = nn.Linear(latent_dim, latent_dim)
 
         for p in self.resnet18.parameters():
             p.requires_grad = True
 
     def forward(self, x):
-        # print(1, x.size())
+        # print("1 shape", x.size())
         x = self.resnet18(x)
-        # print(2, x.size())
+        x = torch.squeeze(x)
+        # print("2 shape", x.size())
+        x = self.l1(x)
+        x = self.r1(x)
+        x = self.l2(x)
         return x

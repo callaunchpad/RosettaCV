@@ -15,6 +15,8 @@ from torch.utils.data import DataLoader
 Constant cross_entropy method
 """
 cross_entropy = torch.nn.CrossEntropyLoss()
+mse = torch.nn.MSELoss()
+
 
 
 def get_positive_and_negative_samples(encodings: List[torch.Tensor], model: nn.Module,
@@ -90,6 +92,9 @@ def contrastive_loss(encoding: torch.Tensor, positive_sample: torch.Tensor,
     assert len(negative_samples.size()) == 3, "Expecting negative sample shape: (N x K x D)"
 
     # Stack positive sample on top of negative
+    print("lol1", positive_sample.shape)
+    print("lol2", negative_samples.shape)
+
     all_samples = torch.cat([positive_sample, negative_samples], dim=1)
 
     # Compute the "critic" scores from 3.2 Implementing the Critic
@@ -99,3 +104,6 @@ def contrastive_loss(encoding: torch.Tensor, positive_sample: torch.Tensor,
     targets = torch.zeros(scores.size()[0]).long().to(util.get_project_device())
 
     return cross_entropy(scores, targets)
+
+def l2_reconstruction_loss(decoded_view, inputs):
+    return mse(decoded_view, inputs)
