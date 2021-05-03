@@ -20,10 +20,8 @@ class ResNetEncoder(nn.Module):
             p.requires_grad = True
 
     def forward(self, x):
-        # print("1 shape", x.size())
         x = self.resnet18(x)
         x = torch.squeeze(x)
-        # print("2 shape", x.size())
         x = self.l1(x)
         x = self.r1(x)
         x = self.l2(x)

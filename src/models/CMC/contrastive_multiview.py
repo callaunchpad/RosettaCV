@@ -110,6 +110,7 @@ class WrapperModel(nn.Module):
     """
     def __init__(self, views: List[View], latent_dim: int, memory_bank_size: int = 200):
         super(WrapperModel, self).__init__()
+        assert len(views) >= 2, "Must specify at least 2 views!"
 
         # Assign views and register submodules
         self.views = views
@@ -238,8 +239,11 @@ class CMCTrainer(Trainer):
             avg_loss = 0
 
             # Train on all the batches
-            for index, batch in enumerate(self.train_data):
-                inputs = [view.to(self.device) for view in batch if isinstance(view, torch.Tensor)]
+            for index, inputs in enumerate(self.train_data):
+                # Send to GPU if possible
+                for i, view in enumerate(inputs):
+                    if isinstance(view, torch.Tensor):
+                        inputs[i] = view.to(device)
 
                 # Zero the gradients
                 self.optimizer.zero_grad()
@@ -353,7 +357,6 @@ if __name__ == "__main__":
     from models.CMC.contrastive_multiview import CMCTrainer, View, WrapperModel
 
     view1, view2 = View(fe1, decoder=de1, reconstruction_loss=l2_reconstruction_loss), View(fe2, decoder=de2, reconstruction_loss=l2_reconstruction_loss)
-    # view1, view2 = View(fe1, decoder=None, reconstruction_loss=None), View(fe2, decoder=None, reconstruction_loss=None)
     model = WrapperModel([view1, view2], 512)
 
     trainer = CMCTrainer(model, contrastive_loss, train_loader, validation_data=valid_loader, num_decodings_per_step=1)

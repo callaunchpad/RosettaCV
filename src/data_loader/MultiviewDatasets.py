@@ -4,15 +4,34 @@ dataset and defines methods for creating views from the samples this base
 dataset yields
 """
 import torch
+import numpy as np
 
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
+from torchvision import transforms, datasets
 from typing import Callable, List
+
+from utils.util import split_dataset
+
+"""
+Coco Captions Data Loader
+"""
+def get_coco_data_loader(data_path, annotation_path, batch_size, train_split=None):
+    trfm = transforms.Compose([transforms.Resize((480, 640)), transforms.ToTensor()])
+    data = datasets.CocoDetection(root=data_path, annFile=annotation_path, transform=trfm)
+    data = MultiviewDataset(data, [identity_view], [get_coco_captions])
+    return DataLoader(data, batch_size=batch_size)
+
+def get_coco_data_loaders(data_path, annotation_path, batch_size, train_split):
+    trfm = transforms.Compose([transforms.Resize((480, 640)), transforms.ToTensor()])
+    data = datasets.CocoDetection(root=data_path, annFile=annotation_path, transform=trfm)
+    data = MultiviewDataset(data, [identity_view], [get_coco_captions])
+    
+    train_data, val_data = split_dataset(data, train_split)
+    return DataLoader(train_data, batch_size=batch_size), DataLoader(val_data, batch_size=batch_size)
 
 """
 Multiview Dataset
 """
-
-
 class MultiviewDataset(Dataset):
     """
     Defines a dataset that transforms another dataset into a set of views
@@ -47,7 +66,10 @@ class MultiviewDataset(Dataset):
 """
 Sample View Functions
 """
-
+def get_coco_captions(label):
+    rand_cap = np.random.randint(0, len(label))
+    caption = label[rand_cap]['caption']
+    return caption
 
 def identity_view(X: torch.Tensor) -> torch.Tensor:
     """

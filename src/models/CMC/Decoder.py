@@ -34,7 +34,5 @@ class Decoder(nn.Module):
         x = F.relu(self.convt3(x))
         x = F.relu(self.convt4(x))
         x = self.convt5(x)
-
         x = torch.sigmoid(x)
-
         return x

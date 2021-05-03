@@ -67,7 +67,9 @@ def get_cmc_loss_on_dataloader(model: nn.Module, dataloader: DataLoader, loss_fn
     # Get all the encodings
     for batch in dataloader:
         # Send to GPU if available
-        batch = [view.to(device) for view in batch]
+        for i, view in enumerate(batch):
+            if isinstance(view, torch.Tensor):
+                batch[i] = view.to(device)
 
         # Get the positive and negative samples from the batch
         encodings = model(batch, no_cache=True)

@@ -30,6 +30,12 @@ def set_project_device(device: torch.device) -> None:
     global DEVICE
     DEVICE = device
 
+def split_dataset(data, train_proportion):
+    train_len = int(len(data) * 0.7 * 0.1)
+    valid_len = int(len(data) * 0.1 - train_len)
+    rest = len(data) - train_len - valid_len
+    train_data, valid_data, _ = torch.utils.data.random_split(data, [train_len, valid_len, rest])
+    return train_data, valid_data
 
 def get_loss_on_dataloader(model: nn.Module, data_loader: DataLoader, loss_fn: Callable) -> torch.Tensor:
     """
