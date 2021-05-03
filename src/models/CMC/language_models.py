@@ -2,6 +2,7 @@ import torch
 
 import torch.nn as nn
 import torch.nn.functional as F
+import utils.util as util
 
 from transformers import BertTokenizer, BertModel, BertLMHeadModel, BertConfig
 
@@ -23,6 +24,7 @@ class TextEncoder(nn.Module):
     def forward(self, x):
         # Tokenize the text
         tokenized = self.tokenizer(x, padding=True, return_tensors="pt")['input_ids']
+        tokenized = tokenized.to(util.get_project_device())
 
         # Forward pass
         model_outputs = self.model(tokenized).last_hidden_state
@@ -54,12 +56,12 @@ class TextDecoder(nn.Module):
         self.needs_labels = True
 
     def forward(self, latent_encoding: torch.Tensor, decoder_inputs: torch.Tensor) -> torch.Tensor:
-
         # Change dimension of the input to match cross-attention in BERT
         latent_encoding = F.relu(self.linear(latent_encoding))
 
         # Tokenize the inputs
         decoder_inputs = self.tokenizer(decoder_inputs, return_tensors="pt", padding=True).input_ids
+        decoder_inputs = decoder_inputs.to(util.get_project_device())
 
         # Replicate the latent embedding to mimic an encoder output
         sequence_length = decoder_inputs.size()[1]

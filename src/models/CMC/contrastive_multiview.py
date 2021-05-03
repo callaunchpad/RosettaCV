@@ -234,7 +234,7 @@ class CMCTrainer(Trainer):
 
             # Train on all the batches
             for index, batch in enumerate(self.train_data):
-                inputs = [view.to(self.device) for view in batch]
+                inputs = [view.to(self.device) for view in batch if type(view) != list]
 
                 # Zero the gradients
                 self.optimizer.zero_grad()
