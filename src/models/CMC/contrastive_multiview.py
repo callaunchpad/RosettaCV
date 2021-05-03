@@ -13,7 +13,7 @@ import numpy as np
 from typing import TypeVar, List, Callable
 from trainer.trainer import Trainer
 from collections import deque
-from losses.cmc_losses import get_cmc_loss_on_dataloader, get_positive_and_negative_samples
+from losses.cmc_losses import get_cmc_loss_on_dataloader, get_positive_and_negative_samples, l2_reconstruction_loss
 from itertools import product
 
 T = TypeVar("T")
@@ -34,8 +34,8 @@ class View:
         :param reconstruction_loss: A loss for comparing latents that are decoded into this
         view
         """
-        assert not decoder is not None and reconstruction_loss is None, "Reconstruction loss must be specified if" \
-                                                                        "decoder is specified."
+        # assert not decoder is not None and reconstruction_loss is not None, "Reconstruction loss must be specified if" \
+                                                                        # "decoder is specified."
         self.encoder = encoder
         self.decoder = decoder
         self.reconstruction_loss = reconstruction_loss
@@ -190,7 +190,7 @@ class CMCTrainer(Trainer):
         :return: A loss on the decodings sampled
         """
         # Sample decoding pathways
-        decodings = np.random.choice(self.encode_decode_pairs, size=self.num_decodings, replace=False)
+        decodings = random.sample(self.encode_decode_pairs, k=self.num_decodings)
 
         # Perform all relevant decodings
         decoding_loss = torch.Tensor([0]).to(util.get_project_device())
@@ -282,7 +282,7 @@ class CMCTrainer(Trainer):
 
 
 from torchvision import models, datasets
-from torchvision.transforms import Compose, ToTensor
+from torchvision.transforms import Compose, ToTensor, Resize
 from data_loader.MultiviewDatasets import get_noisy_view, MultiviewDataset, identity_view
 from torch.utils.data import DataLoader
 resnet_feature_size = 512
@@ -313,16 +313,22 @@ if __name__ == "__main__":
     from models.CMC.Decoder import Decoder
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    fe1 = ResNetEncoder(device, latent_dim=1000)
-    fe2 = ResNetEncoder(device, latent_dim=1000)
+    fe1 = ResNetEncoder(device, latent_dim=512)
+    fe2 = ResNetEncoder(device, latent_dim=512)
     de1 = Decoder(100, 100, 1000, 5)
     de2 = Decoder(100, 100, 1000, 5)
 
 
-    base_data = datasets.CIFAR10("../data", download=True, transform=Compose([ToTensor()]))
+    # base_data = datasets.CIFAR10("../data", download=True, transform=Compose([ToTensor()]))
+
+    path2data = "/datasets/coco/data/train2017"
+    path2json = "/datasets/coco/data/annotations/captions_train2017.json"
+
+    coco_train = datasets.CocoDetection(root = path2data, annFile = path2json, transform=Compose([Resize((480, 640)), ToTensor()]))
+
     noisy_view = get_noisy_view()
 
-    ds = MultiviewDataset(base_data, [identity_view, noisy_view])
+    ds = MultiviewDataset(coco_train, [identity_view, noisy_view])
 
     train_proportion = 0.7
     train_len = int(len(ds) * 0.7 * 0.1)
@@ -335,10 +341,11 @@ if __name__ == "__main__":
     from losses.cmc_losses import contrastive_loss
     from models.CMC.contrastive_multiview import CMCTrainer, View, WrapperModel
 
-    view1, view2 = View(fe1, de1), View(fe2, de2)
+    view1, view2 = View(fe1, decoder=de1, reconstruction_loss=l2_reconstruction_loss), View(fe2, decoder=de2, reconstruction_loss=l2_reconstruction_loss)
+    # view1, view2 = View(fe1, decoder=None, reconstruction_loss=None), View(fe2, decoder=None, reconstruction_loss=None)
     model = WrapperModel([view1, view2], 512)
 
-    trainer = CMCTrainer(model, contrastive_loss, train_loader, validation_data=valid_loader)
+    trainer = CMCTrainer(model, contrastive_loss, train_loader, validation_data=valid_loader, num_decodings_per_step=1)
 
     trainer.train(500)
 

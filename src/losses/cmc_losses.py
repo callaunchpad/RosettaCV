@@ -18,6 +18,7 @@ CONSTANTS
 """
 PAD_TOKEN = 0
 tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+mse = torch.nn.MSELoss()
 
 
 def get_positive_and_negative_samples(encodings: List[torch.Tensor], model: nn.Module,
@@ -124,3 +125,6 @@ def language_reconstruction_loss(predicted_logits: torch.Tensor, ground_truth_ca
     # Cross entropy ignoring locations that are padded
     return F.cross_entropy(predicted_logits, ground_truth_tok, ignore_index=PAD_TOKEN)
 
+
+def l2_reconstruction_loss(decoded_view, inputs):
+    return mse(decoded_view, inputs)

@@ -31,4 +31,6 @@ class Decoder(nn.Module):
         
         x = torch.sigmoid(x)
 
+        print("lol3", x.shape)
+
         return x
