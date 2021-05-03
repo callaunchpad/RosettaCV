@@ -74,18 +74,3 @@ class TextDecoder(nn.Module):
         :return: The caption generated
         """
         raise NotImplementedError()  # TODO: Implement during evaluation stage
-
-
-if __name__ == "__main__":
-    te = TextEncoder(512)
-    td = TextDecoder(512)
-
-    sentences = ["this is a test sentence", "another test sentence", "and yet another, but longer, test sentence"]
-
-    encodings = te(sentences)
-    print(encodings.shape)
-    decodings = td(encodings, sentences)
-
-    from losses.cmc_losses import language_reconstruction_loss
-
-    print(f"Loss:{language_reconstruction_loss(decodings, sentences)}")
