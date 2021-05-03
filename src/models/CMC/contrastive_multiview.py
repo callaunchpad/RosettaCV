@@ -239,7 +239,7 @@ class CMCTrainer(Trainer):
 
             # Train on all the batches
             for index, batch in enumerate(self.train_data):
-                inputs = [view.to(self.device) for view in batch if type(view) != list]
+                inputs = [view.to(self.device) for view in batch if isinstance(view, torch.Tensor)]
 
                 # Zero the gradients
                 self.optimizer.zero_grad()
