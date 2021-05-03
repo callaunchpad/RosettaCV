@@ -8,7 +8,7 @@ import utils.data_io as io
 
 from torch.nn import Module
 from typing import Tuple
-from torch.utils.tensorboard import SummaryWriter
+# from torch.utils.tensorboard import SummaryWriter
 from numpy import ndarray
 
 
@@ -46,6 +46,8 @@ def visualize_model(model: Module, images: ndarray, experiment_name: str = "defa
     :param model: The model to visualize
     :return: None
     """
+    raise NotImplementedError()
+
     writer = SummaryWriter(f"{io.get_model_path()}/tensorboard/{experiment_name}")
     writer.add_graph(model, images)
     writer.close()

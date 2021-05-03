@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 class Decoder(nn.Module):
     def __init__(self, image_h, image_w, latent_dim=512, reshape_size=4):
         super(Decoder, self).__init__()

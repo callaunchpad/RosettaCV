@@ -11,12 +11,11 @@ import random
 import torch.nn as nn
 import utils.model_io as model_io
 import utils.util as util
-import numpy as np
 
 from typing import TypeVar, List, Callable
 from trainer.trainer import Trainer
 from collections import deque
-from losses.cmc_losses import get_cmc_loss_on_dataloader, get_positive_and_negative_samples, l2_reconstruction_loss
+from losses.cmc_losses import get_cmc_loss_on_dataloader, get_positive_and_negative_samples, l2_reconstruction_loss, language_reconstruction_loss
 from itertools import product
 
 T = TypeVar("T")
@@ -298,52 +297,37 @@ class CMCTrainer(Trainer):
 
 from torchvision import models, datasets
 from torchvision.transforms import Compose, ToTensor, Resize
-from data_loader.MultiviewDatasets import get_noisy_view, MultiviewDataset, identity_view
+from data_loader.MultiviewDatasets import MultiviewDataset, identity_view, get_coco_captions
 from torch.utils.data import DataLoader
 resnet_feature_size = 512
 
-class FeatureExtractor(nn.Module):
-    def __init__(self, latent_dim: int = 512):
-        super(FeatureExtractor, self).__init__()
-        self.resnet = models.resnet18(pretrained=False)
-        self.features = None
 
-        # Register a hook for forward pass caching
-        self.resnet.layer4.register_forward_hook(self.intermediate_hook)
-        self.linear = nn.Linear(resnet_feature_size, latent_dim)
-
-    def forward(self, X):
-        # Perform forward pass
-        self.resnet(X)
-
-        return self.linear(self.features)
-
-    def intermediate_hook(self, module, inputs, outputs):
-        self.features = torch.clone(outputs.view(outputs.size()[0], -1))
-
-
-
-if __name__ == "__main__":    
+if __name__ == "__main__":
     from models.CMC.ResNetEncoder import ResNetEncoder
     from models.CMC.Decoder import Decoder
-    
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    fe1 = ResNetEncoder(device, latent_dim=512)
-    fe2 = ResNetEncoder(device, latent_dim=512)
-    de1 = Decoder(480, 640)
-    de2 = Decoder(480, 640)
+    from models.CMC.language_models import TextEncoder, TextDecoder
 
+    # Ensure aspect ratio is 0.75
+    image_size = (150, 200)
+    device = util.get_project_device()
+    latent_dim = 512
+
+    # Define encoders, decoders, and views
+    image_encoder = ResNetEncoder(device, latent_dim=latent_dim)
+    image_decoder = Decoder(*image_size)
+    image_view = View(image_encoder, image_decoder, "Image", reconstruction_loss=l2_reconstruction_loss)
+
+    caption_encoder = TextEncoder(latent_dim)
+    caption_decoder = TextDecoder(latent_dim)
+    caption_view = View(caption_encoder, caption_decoder, "Caption", reconstruction_loss=language_reconstruction_loss)
 
     # base_data = datasets.CIFAR10("../data", download=True, transform=Compose([ToTensor()]))
 
     path2data = "/datasets/coco/data/train2017"
     path2json = "/datasets/coco/data/annotations/captions_train2017.json"
 
-    coco_train = datasets.CocoDetection(root = path2data, annFile = path2json, transform=Compose([Resize((480, 640)), ToTensor()]))
-
-    noisy_view = get_noisy_view()
-
-    ds = MultiviewDataset(coco_train, [identity_view, noisy_view])
+    coco_train = datasets.CocoDetection(root = path2data, annFile = path2json, transform=Compose([Resize(image_size), ToTensor()]))
+    ds = MultiviewDataset(coco_train, [identity_view], [get_coco_captions])
 
     train_proportion = 0.7
     train_len = int(len(ds) * 0.7 * 0.1)
@@ -356,11 +340,9 @@ if __name__ == "__main__":
     from losses.cmc_losses import contrastive_loss
     from models.CMC.contrastive_multiview import CMCTrainer, View, WrapperModel
 
-    view1, view2 = View(fe1, decoder=de1, reconstruction_loss=l2_reconstruction_loss), View(fe2, decoder=de2, reconstruction_loss=l2_reconstruction_loss)
-    model = WrapperModel([view1, view2], 512)
+    model = WrapperModel([image_view, caption_view], latent_dim)
 
     trainer = CMCTrainer(model, contrastive_loss, train_loader, validation_data=valid_loader, num_decodings_per_step=1)
-
     trainer.train(500)
 
 

@@ -15,11 +15,14 @@ from utils.util import split_dataset
 """
 Coco Captions Data Loader
 """
+
+
 def get_coco_data_loader(data_path, annotation_path, batch_size, train_split=None):
     trfm = transforms.Compose([transforms.Resize((480, 640)), transforms.ToTensor()])
     data = datasets.CocoDetection(root=data_path, annFile=annotation_path, transform=trfm)
     data = MultiviewDataset(data, [identity_view], [get_coco_captions])
     return DataLoader(data, batch_size=batch_size)
+
 
 def get_coco_data_loaders(data_path, annotation_path, batch_size, train_split):
     trfm = transforms.Compose([transforms.Resize((480, 640)), transforms.ToTensor()])
@@ -66,10 +69,13 @@ class MultiviewDataset(Dataset):
 """
 Sample View Functions
 """
+
+
 def get_coco_captions(label):
     rand_cap = np.random.randint(0, len(label))
     caption = label[rand_cap]['caption']
     return caption
+
 
 def identity_view(X: torch.Tensor) -> torch.Tensor:
     """
