@@ -19,7 +19,7 @@ from data_loader.few_shot_dataloaders import get_few_shot_dataloader
 from trainer.mpl_trainer import train_mpl
 from trainer.trainer import Trainer
 from utils.augmentations import *
-import pdb
+import os
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 torch.manual_seed(7)
@@ -30,7 +30,7 @@ mode = 'mpl'
 
 BATCH_SIZE = 256
 DATASET = 'cifar'
-N_EPOCHS = 1
+N_EPOCHS = 25
 LR = 1e-4
 WEIGHT_U = 1.5
 UDA_THRESHOLD = 0.6
@@ -38,6 +38,9 @@ N_STUDENT_STEPS = 1
 STOCH_DEPTH_P = 0.1
 SAVE_MODEL = True
 MODEL_SAVE_DIR = f"/home/sean.obrien/RosettaCV/src/trained_models/{DATASET}/mpl/"
+
+######
+MODEL_SAVE_DIR = os.path.join(MODEL_SAVE_DIR, datetime.now().strftime('%m-%d-%H-%M'))
 
 def train_cifar(model, num_epochs=50, batch_size=32, version='v1', save_model=False, optimizer=None):
     cifar10_dataset = CIFAR10(root="/datasets", download=True, transform=transforms.ToTensor())
@@ -179,31 +182,6 @@ if mode == 'denoisingae':
             train_denoisingae(model, model_size, 'imagenet', num_epochs=5, random_noise=noise_amt, save_model=True)
             #wandb.alert(title="Train DenoisingAE", text="Finished training")
 elif mode == 'mpl':
-    '''
-    print('[*] Training MPL on FashionMNIST')
-    batch_size = 32
-    fashion_mnist_denoise = FashionMnistDenoising()
-    train_dl = fashion_mnist_denoise.loader(True, batch_size=batch_size)
-    val_dl = fashion_mnist_denoise.loader(True, batch_size=batch_size)
-    '''
-
-    '''
-    # Use only train set and split into train / val
-    print('[*] Training MPL on ImageNet')
-    batch_size = 256
-
-    transform = transforms.Compose([
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor()
-    ])
-    imageNet_dataset = ImageFolder('/datasets/imagenetwhole/ilsvrc2012/train/', transform=transform)
-    lengths = [int(len(imageNet_dataset)*0.6), len(imageNet_dataset) - int(len(imageNet_dataset)*0.6)]
-    split_train_dataset, split_val_dataset = random_split(imageNet_dataset, lengths)
-    train_dl = DataLoader(dataset=split_train_dataset, batch_size=batch_size, shuffle=True)
-    val_dl = DataLoader(dataset=split_val_dataset, batch_size=batch_size, shuffle=True)
-    '''
-
     print('[*] Training MPL on Cifar10')
     batch_size = 32
 
@@ -240,10 +218,6 @@ elif mode == 'mpl':
     student_model = nn.DataParallel(student_model, device_ids=[0, 1])
     # student_model.load_state_dict(checkpoint['student_model'])
 
-    t_optimizer = torch.optim.Adam(teacher_model.parameters(), lr=1e-4, weight_decay=1e-5)
-    # t_optimizer.load_state_dict(checkpoint['t_optimizer'])
-    s_optimizer = torch.optim.Adam(student_model.parameters(), lr=1e-4, weight_decay=1e-5)
-    # s_optimizer.load_state_dict(checkpoint['s_optimizer'])
 
     with wandb.init(project="MPL-Cifar10"):
         train_mpl(teacher_model,
