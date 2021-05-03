@@ -1,6 +1,9 @@
 """
 This file implements contrastive multiview coding with our additions
 """
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "5,6"
+
 import torch
 import itertools
 import random
@@ -180,7 +183,7 @@ class CMCTrainer(Trainer):
         # Setup the view pairs
         all_views = self.model.views
         self.decodable_views = [view for view in all_views if view.decodable()]
-        self.encode_decode_pairs = list(product(all_views, self.decodable_views))
+        self.encode_decode_pairs = list(product(range(len(all_views)), range(len(self.decodable_views))))
 
     def decoding_loss(self, inputs: List[torch.Tensor], encodings: List[torch.Tensor]) -> torch.Tensor:
         """
@@ -197,9 +200,9 @@ class CMCTrainer(Trainer):
 
         for encode_view_ind, decode_view_ind in decodings:
             decoded_view = self.model.views[decode_view_ind]
-            decoded_view = decoded_view.decode(encodings[encode_view_ind])
+            decoded_view_out = decoded_view.decode(encodings[encode_view_ind])
 
-            reconstruction_loss = decoded_view.reconstruction_loss(decoded_view, inputs[decode_view_ind])
+            reconstruction_loss = decoded_view.reconstruction_loss(decoded_view_out, inputs[decode_view_ind])
 
             # Report this reconstruction loss
             self.wandb_run.log({f"{self.model.views[encode_view_ind].get_id()} -> "
@@ -244,7 +247,9 @@ class CMCTrainer(Trainer):
                 if self.use_decoding_loss:
                     reconstruction_loss = self.decoding_loss(inputs, encodings)
                     self.wandb_run.log({"Contrastive Loss": loss_value})
-                    loss_value += reconstruction_loss
+                    # print("abs", reconstruction_loss)
+                    # print("dababy,", loss_value)
+                    loss_value += reconstruction_loss[0]
                 else:
                     self.wandb_run.log({"Contrastive Loss": loss_value})
 
@@ -315,8 +320,8 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     fe1 = ResNetEncoder(device, latent_dim=512)
     fe2 = ResNetEncoder(device, latent_dim=512)
-    de1 = Decoder(100, 100, 1000, 5)
-    de2 = Decoder(100, 100, 1000, 5)
+    de1 = Decoder(480, 640)
+    de2 = Decoder(480, 640)
 
 
     # base_data = datasets.CIFAR10("../data", download=True, transform=Compose([ToTensor()]))
