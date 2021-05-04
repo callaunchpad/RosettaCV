@@ -2,7 +2,7 @@
 This file implements contrastive multiview coding with our additions
 """
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "5,6"
+os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 
 import torch
 import itertools
@@ -75,7 +75,10 @@ class View:
         assert self.decoder is not None, "Decode method not specified for this view"
 
         if not eval_mode:
-            return self.decoder(latent_encoding)
+            if hasattr(self.decoder, "needs_labels") and self.decoder.needs_labels:
+                return self.decoder(latent_encoding, label)
+            else:
+                return self.decoder(latent_encoding)
 
         is_training = self.decoder.training
         self.decoder.eval()
@@ -205,8 +208,8 @@ class CMCTrainer(Trainer):
         for encode_view_ind, decode_view_ind in decodings:
             decoded_view = self.model.views[decode_view_ind]
 
-            decoded_view_out = decoded_view.decode(encodings[encode_view_ind])
-            # decoded_view = decoded_view.decode(encodings[encode_view_ind], inputs[decode_view_ind])
+            # decoded_view_out = decoded_view.decode(encodings[encode_view_ind])
+            decoded_view_out = decoded_view.decode(encodings[encode_view_ind], inputs[decode_view_ind])
 
             reconstruction_loss = decoded_view.reconstruction_loss(decoded_view_out, inputs[decode_view_ind])
 
@@ -226,6 +229,9 @@ class CMCTrainer(Trainer):
         :param save_to: Where to save the models to
         :return: None
         """
+        print(f"Training set size: {self.train_data.batch_size * len(self.train_data)}\n"
+              f"Validation set size: {self.validation_data.batch_size * len(self.validation_data)}")
+
         if save_to is None:
             save_to = self.wandb_run.name
         if save_best:
@@ -242,7 +248,7 @@ class CMCTrainer(Trainer):
                 # Send to GPU if possible
                 for i, view in enumerate(inputs):
                     if isinstance(view, torch.Tensor):
-                        inputs[i] = view.to(device)
+                        inputs[i] = view.to(self.device)
 
                 # Zero the gradients
                 self.optimizer.zero_grad()
@@ -256,8 +262,6 @@ class CMCTrainer(Trainer):
                 if self.use_decoding_loss:
                     reconstruction_loss = self.decoding_loss(inputs, encodings)
                     self.wandb_run.log({"Contrastive Loss": loss_value})
-                    # print("abs", reconstruction_loss)
-                    # print("dababy,", loss_value)
                     loss_value += reconstruction_loss[0]
                 else:
                     self.wandb_run.log({"Contrastive Loss": loss_value})
@@ -278,7 +282,7 @@ class CMCTrainer(Trainer):
             print(f"Average Validation Loss: {val_loss}")
             self.wandb_run.log({"Validation Loss": val_loss})
 
-            if val_loss < min_val_loss and save_best:
+            if min_val_loss > val_loss > 0 and save_best:
                 print(f"Validation loss of {val_loss} better than previous best of {min_val_loss}")
                 print(f"Saving model...")
                 model_io.save_model_checkpoint(save_to, self.model, self.optimizer)
@@ -308,7 +312,7 @@ if __name__ == "__main__":
     from models.CMC.language_models import TextEncoder, TextDecoder
 
     # Ensure aspect ratio is 0.75
-    image_size = (150, 200)
+    image_size = (480, 640)
     device = util.get_project_device()
     latent_dim = 512
 
@@ -321,8 +325,6 @@ if __name__ == "__main__":
     caption_decoder = TextDecoder(latent_dim)
     caption_view = View(caption_encoder, caption_decoder, "Caption", reconstruction_loss=language_reconstruction_loss)
 
-    # base_data = datasets.CIFAR10("../data", download=True, transform=Compose([ToTensor()]))
-
     path2data = "/datasets/coco/data/train2017"
     path2json = "/datasets/coco/data/annotations/captions_train2017.json"
 
@@ -330,8 +332,8 @@ if __name__ == "__main__":
     ds = MultiviewDataset(coco_train, [identity_view], [get_coco_captions])
 
     train_proportion = 0.7
-    train_len = int(len(ds) * 0.7 * 0.1)
-    valid_len = int(len(ds) * 0.1 - train_len)
+    train_len = int(len(ds) * 0.3)
+    valid_len = int(len(ds) * 0.1)
     rest = len(ds) - train_len - valid_len
 
     train_data, valid_data, _ = torch.utils.data.random_split(ds, [train_len, valid_len, rest])
@@ -342,7 +344,7 @@ if __name__ == "__main__":
 
     model = WrapperModel([image_view, caption_view], latent_dim)
 
-    trainer = CMCTrainer(model, contrastive_loss, train_loader, validation_data=valid_loader, num_decodings_per_step=1)
+    trainer = CMCTrainer(model, contrastive_loss, train_loader, validation_data=valid_loader, num_decodings_per_step=2)
     trainer.train(500)
 
 

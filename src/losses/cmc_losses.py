@@ -122,7 +122,7 @@ def language_reconstruction_loss(predicted_logits: torch.Tensor, ground_truth_ca
 
     # Reshape ground truth and predicted
     predicted_logits = predicted_logits.view(-1, predicted_logits.shape[-1])  # Shape[-1] is the vocab size
-    ground_truth_tok = ground_truth_tok.view(-1)
+    ground_truth_tok = ground_truth_tok.view(-1).to(util.get_project_device())
 
     # Cross entropy ignoring locations that are padded
     return F.cross_entropy(predicted_logits, ground_truth_tok, ignore_index=PAD_TOKEN)

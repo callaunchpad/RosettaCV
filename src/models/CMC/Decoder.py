@@ -37,3 +37,7 @@ class Decoder(nn.Module):
         x = self.convt5(x)
         x = torch.sigmoid(x)
         return x
+
+
+if __name__ == "__main__":
+    dec = Decoder()
