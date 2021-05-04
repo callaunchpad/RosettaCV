@@ -130,3 +130,15 @@ def language_reconstruction_loss(predicted_logits: torch.Tensor, ground_truth_ca
 
 def l2_reconstruction_loss(decoded_view, inputs):
     return mse(decoded_view, inputs)
+
+def domain_confusion_loss(latent_dim, num_domains):
+    """
+    Return a loss that is adversarial to the ability of the DANN network's ability
+    to predict the domain of the latent space.
+    """
+    dann = new Dann(latent_dim, num_domains)
+    loss = torch.nn.CrossEntropyLoss()
+    def domain_confusion_loss_helper(latent_space, real_domain):
+        domain_preds = dann(latent_space)
+        return loss(domain_preds, real_domain)
+    return domain_confusion_loss_helper
