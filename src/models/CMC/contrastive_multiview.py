@@ -2,7 +2,7 @@
 This file implements contrastive multiview coding with our additions
 """
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+os.environ["CUDA_VISIBLE_DEVICES"] = "4,5"
 
 import torch
 import itertools
@@ -301,7 +301,7 @@ class CMCTrainer(Trainer):
 
 from torchvision import models, datasets
 from torchvision.transforms import Compose, ToTensor, Resize
-from data_loader.MultiviewDatasets import MultiviewDataset, identity_view, get_coco_captions
+from data_loader.MultiviewDatasets import MultiviewDataset, identity_view, get_coco_captions, get_grayscale_view, get_inverted_view, get_complementary_view, get_saturated_view
 from torch.utils.data import DataLoader
 resnet_feature_size = 512
 
@@ -321,6 +321,22 @@ if __name__ == "__main__":
     image_decoder = Decoder(*image_size)
     image_view = View(image_encoder, image_decoder, "Image", reconstruction_loss=l2_reconstruction_loss)
 
+    # grayscale_encoder = ResNetEncoder(device, latent_dim=latent_dim)
+    # grayscale_decoder = Decoder(*image_size)
+    # grayscale_view = View(grayscale_encoder, grayscale_decoder, "Grayscale", reconstruction_loss=l2_reconstruction_loss)
+
+    inverted_encoder = ResNetEncoder(device, latent_dim=latent_dim)
+    inverted_decoder = Decoder(*image_size)
+    inverted_view = View(inverted_encoder, inverted_decoder, "inverted", reconstruction_loss=l2_reconstruction_loss)
+
+    complementary_encoder = ResNetEncoder(device, latent_dim=latent_dim)
+    complementary_decoder = Decoder(*image_size)
+    complementary_view = View(complementary_encoder, complementary_decoder, "complementary", reconstruction_loss=l2_reconstruction_loss)
+
+    saturated_encoder = ResNetEncoder(device, latent_dim=latent_dim)
+    saturated_decoder = Decoder(*image_size)
+    saturated_view = View(saturated_encoder, saturated_decoder, "saturated", reconstruction_loss=l2_reconstruction_loss)
+
     caption_encoder = TextEncoder(latent_dim)
     caption_decoder = TextDecoder(latent_dim)
     caption_view = View(caption_encoder, caption_decoder, "Caption", reconstruction_loss=language_reconstruction_loss)
@@ -329,11 +345,12 @@ if __name__ == "__main__":
     path2json = "/datasets/coco/data/annotations/captions_train2017.json"
 
     coco_train = datasets.CocoDetection(root = path2data, annFile = path2json, transform=Compose([Resize(image_size), ToTensor()]))
-    ds = MultiviewDataset(coco_train, [identity_view], [get_coco_captions])
+    ds = MultiviewDataset(coco_train, [identity_view, get_inverted_view(), get_complementary_view(), get_saturated_view()], [get_coco_captions])
+    # get_grayscale_view(),
 
     train_proportion = 0.7
     train_len = int(len(ds) * 0.3)
-    valid_len = int(len(ds) * 0.1)
+    valid_len = int(len(ds) * 0.05)
     rest = len(ds) - train_len - valid_len
 
     train_data, valid_data, _ = torch.utils.data.random_split(ds, [train_len, valid_len, rest])
@@ -342,9 +359,10 @@ if __name__ == "__main__":
     from losses.cmc_losses import contrastive_loss
     from models.CMC.contrastive_multiview import CMCTrainer, View, WrapperModel
 
-    model = WrapperModel([image_view, caption_view], latent_dim)
+    model = WrapperModel([image_view, inverted_view, complementary_view, saturated_view, caption_view], latent_dim)
+    #grayscale_view,
 
-    trainer = CMCTrainer(model, contrastive_loss, train_loader, validation_data=valid_loader, num_decodings_per_step=2)
+    trainer = CMCTrainer(model, contrastive_loss, train_loader, validation_data=valid_loader, num_decodings_per_step=4)
     trainer.train(500)
 
 

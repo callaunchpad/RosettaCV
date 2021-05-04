@@ -92,3 +92,32 @@ def get_noisy_view(sigma: float = 0.1) -> Callable:
         return torch.randn_like(X) * sigma + X
 
     return noisy_view
+
+def get_grayscale_view() -> Callable:
+    return transforms.Compose([
+        transforms.Grayscale(num_output_channels=3),
+    ])
+
+def get_complementary_view() -> Callable:
+    def complementary_view(X: torch.Tensor) -> torch.Tensor:
+        return transforms.functional.adjust_hue(X, 0.5)
+    return complementary_view
+
+def get_complementary_view_alt() -> Callable:
+    def complementary_view_alt(X: torch.Tensor) -> torch.Tensor:
+        return transforms.functional.adjust_hue(X, -0.5)
+    return complementary_view_alt
+
+
+def get_saturated_view() -> Callable:
+    def saturated_view(X: torch.Tensor) -> torch.Tensor:
+        return transforms.functional.adjust_saturation(X, 3)
+    return saturated_view
+
+
+def get_inverted_view() -> Callable:
+    def inverted_view(X: torch.Tensor) -> torch.Tensor:
+        return transforms.functional.invert(X)
+    return inverted_view
+    
+

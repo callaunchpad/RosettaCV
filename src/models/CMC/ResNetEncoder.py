@@ -17,7 +17,7 @@ class ResNetEncoder(nn.Module):
         self.l2 = nn.Linear(latent_dim, latent_dim)
 
         for p in self.resnet18.parameters():
-            p.requires_grad = True
+            p.requires_grad = False
 
     def forward(self, x):
         x = self.resnet18(x)
