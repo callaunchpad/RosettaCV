@@ -54,8 +54,6 @@ def get_few_shot_dataloader(dataset: Dataset, indices_file: str = None, sample_s
         # Sample indices and save to data folder
         indices = sample_indices(dataset, sample_size, by_class=by_class)
         np.save(f"{data_io.get_data_path()}/subsampled_data_{sample_size}", indices)
-    
-    # print(len(dataset))
     # Return a dataloader
     return DataLoader(SubSampledDataset(dataset, indices), batch_size=batch_size, shuffle=True)
 
