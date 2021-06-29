@@ -143,6 +143,128 @@ class OmniglotFewShot(OmniglotClass):
 
         return dataloader
 
+class MiniImageNetByClass:
+    class LabelCorrectingDataset(Dataset):
+        """
+        This dataset corrects labels to be 0 indexed and continuous if we are
+        using imagefolder with a valid_file mask
+        """
+
+        def __init__(self, base_dataset: Dataset):
+            """
+            Sets up the dataset
+            :param base_dataset: The base dataset to wrap
+            """
+            self.dataset = base_dataset
+
+            # Construct the new label map
+            labels = set()
+            for _, label in self.dataset:
+                labels.add(label)
+
+            labels = list(labels)
+            labels.sort()
+
+            self.label_map = {}
+            for i in range(len(labels)):
+                self.label_map[labels[i]] = i
+
+        def __len__(self):
+            return len(self.dataset)
+
+        def __getitem__(self, index):
+            """
+            Gets the nth item of the dataset and rearranges the labels
+            :param index: The index to get
+            :return: The nth item of the datset
+            """
+            img, label = self.dataset[index]
+            label = type(label)(self.label_map[int(label)])
+
+            return img, label
+
+    class MiniImageNetTask(Task):
+        def __init__(self, task_folder: str, start_idx: int = 0, output_width: int = 100):
+            """
+            Initializes the task
+            :param dataset: The sub-dataset to pull the images from
+            :param output_width: The max number of classes to use
+            """
+            print("Starting a task")
+            transforms = torchvision.transforms.Compose([
+                torchvision.transforms.ToTensor(),
+                torchvision.transforms.Resize((128, 128))
+            ])
+
+            if output_width is None:
+                self.dataset = torchvision.datasets.ImageFolder(task_folder, transform=transforms)
+                return
+
+            # If we specify a number of classes, use the classes from start to output width
+            first_n = set(glob.glob(f"{task_folder}/*/")[start_idx:output_width])
+
+            def valid_file(file_path: str) -> bool:
+                path = Path(file_path)
+
+                return f"{str(path.parent.absolute())}/" in first_n
+
+            # Create a dataset that only selects from the given n characters
+            self.dataset = MiniImageNetByClass.LabelCorrectingDataset(torchvision.datasets.ImageFolder(task_folder, is_valid_file=valid_file, transform=transforms))
+
+        def loader(self, batch_size: int = 32, **kwargs):
+            return torch.utils.data.DataLoader(self.dataset, batch_size=batch_size, **kwargs, shuffle=True)
+
+        def loss_fn(self):
+            return torch.nn.CrossEntropyLoss()
+
+    def __init__(self, num_train_classes: int = 70, num_validation_classes: int = 30,
+                 items_per_class: int = 20, force_constant_size: bool = False):
+        """
+        Creates a class that wraps a list of tasks by sampling alphabets from the mini-imagenet dataset
+        :param num_train_classes: The number of training alphabets to sample as tasks
+        :param num_validation_classes: The number of validation alphabets to sample as tasks
+        :param items_per_class: The number of characters to take per alphabet, if None, take them all
+        :param force_constant_size: Whether or not to force the alphabets to all have the same size by subsampling
+        set to min(items_per_class, 1) because 1 is the output of boolean on/off.
+        """
+        assert num_train_classes <= 1000, "Only 600 classes available for Mini-Imagenet train"
+        assert num_validation_classes <= 100, "Only 100 validation alphabets available for Mini-Imagenet"
+        assert not force_constant_size or items_per_class <= 20, "If forcing all alphabets to the same size" \
+                                                                         "you must make that size <items_per_class>" \
+                                                                         "less than or equal to 14"
+
+        # List of possible train tasks
+        imagenet_path = "/datasets/imagenetwhole/ilsvrc2012"
+        available_train_classes = glob.glob(f"{imagenet_path}/train/*")
+        available_validation_classes = glob.glob(f"{imagenet_path}/val/*")
+
+        # Randomly choose train and validation alphabets
+        train_classes = np.random.choice(available_train_classes, size=num_train_classes).tolist()
+        validation_classes = np.random.choice(available_validation_classes, size=num_validation_classes).tolist()
+
+        self.train_tasks = self.get_tasks("/datasets/imagenetwhole/ilsvrc2012/train", train_classes, force_constant_size, items_per_class)
+        self.validation_tasks = self.get_tasks("/datasets/imagenetwhole/ilsvrc2012/val", validation_classes, force_constant_size, items_per_class)
+
+    def get_tasks(self, task_folder: str, tasks: List[str], constant_size: bool = False,
+                  items_per_class: int = None) -> List[Task]:
+        """
+        Turns lists of directories into lists of abstract tasks
+        :param task_folders: The folder from which to make the task
+        :param constant_size: Whether or not to force the tasks to have constant output size
+        :param items_per_class: The size to force all the takss to output, see above
+        :return: A list of tasks built from the folder
+        """
+        if constant_size:
+            return [MiniImageNetByClass.MiniImageNetTask(task_folder, i, i + items_per_class) for i in range(0, 101 - items_per_class, items_per_class)]
+        return [MiniImageNetByClass.MiniImageNetTask(task_folder, i, i + 20) for i in range(0, 81, 20)]
+
+    def get_train_tasks(self) -> List[Task]:
+        return self.train_tasks
+
+    def get_validation_tasks(self) -> List[Task]:
+        return self.validation_tasks
+
+
 
 class OmniglotByAlphabet:
     class LabelCorrectingDataset(Dataset):
@@ -218,17 +340,17 @@ class OmniglotByAlphabet:
         def loss_fn(self):
             return torch.nn.CrossEntropyLoss()
 
-    def __init__(self, num_train_alphabets: int = 20, num_validation_alphabets: int = 10,
+    def __init__(self, num_train_classes: int = 20, num_validation_alphabets: int = 10,
                  characters_per_alphabet: int = None, force_constant_size: bool = False):
         """
         Creates a class that wraps a list of tasks by sampling alphabets from the omniglot dataset
-        :param num_train_alphabets: The number of training alphabets to sample as tasks
+        :param num_train_classes: The number of training alphabets to sample as tasks
         :param num_validation_alphabets: The number of validation alphabets to sample as tasks
         :param characters_per_alphabet: The number of characters to take per alphabet, if None, take them all
         :param force_constant_size: Whether or not to force the alphabets to all have the same size by subsampling
         set to min(characters_per_alphabet, 14) because 14 is the minimum characters in an alphabet
         """
-        assert num_train_alphabets <= 30, "Only 30 alphabets available for Omniglot train"
+        assert num_train_classes <= 30, "Only 30 alphabets available for Omniglot train"
         assert num_validation_alphabets <= 20, "Only 20 validation alphabets available for Omniglot"
         assert not force_constant_size or characters_per_alphabet <= 14, "If forcing all alphabets to the same size" \
                                                                          "you must make that size <characters_per_alphabet>" \
@@ -244,7 +366,7 @@ class OmniglotByAlphabet:
         available_validation_alphabets = glob.glob(f"{omniglot_path}/images_evaluation/*/")
 
         # Randomly choose train and validation alphabets
-        train_alphabets = np.random.choice(available_train_alphabets, size=num_train_alphabets).tolist()
+        train_alphabets = np.random.choice(available_train_alphabets, size=num_train_classes).tolist()
         validation_alphabets = np.random.choice(available_validation_alphabets, size=num_validation_alphabets).tolist()
 
         self.train_tasks = self.get_tasks(train_alphabets, force_constant_size, characters_per_alphabet)
@@ -259,6 +381,8 @@ class OmniglotByAlphabet:
         :param characters_per_alphabet: The size to force all the takss to output, see above
         :return: A list of tasks built from the folder
         """
+        # So finally, we return a list of Tasks with their own dataset that is supposed to be different
+        # alphabets in each dataset.
         if constant_size:
             return [OmniglotByAlphabet.OmniglotAlphabetTask(folder, characters_per_alphabet) for folder in task_folders]
         return [OmniglotByAlphabet.OmniglotAlphabetTask(folder) for folder in task_folders]
@@ -358,6 +482,8 @@ class MNISTTask(Task):
             return DataLoader(dataset=train_set, batch_size=self.batch_size, shuffle=True)
         else:
             return DataLoader(dataset=val_set, batch_size=self.batch_size, shuffle=True)
+        
+
 
 class MNISTClass(MNISTTask):
     def loss_fn(self):
