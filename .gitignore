@@ -1,3 +1,6 @@
+# Vim/Python stuff
+*.py.swp*
+
 # Project specific stuff
 **/wandb
 

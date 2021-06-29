@@ -30,14 +30,15 @@ class Trainer:
         """
         # Create optimizer if none passed
         if optimizer is None:
-            self.optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+            self.optimizer = torch.optim.Adam(model.parameters(recurse=True), lr=0.001)
         else:
             self.optimizer = optimizer
 
         if device is None:
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            self.device = util.get_project_device()
         else:
             self.device = device
+            util.set_project_device(self.device)
 
         # Create a learning rate scheduler
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer)
