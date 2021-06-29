@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
+from functools import partial
 
 # https://towardsdatascience.com/residual-network-implementing-resnet-a7da63c7b278
 
@@ -53,7 +54,7 @@ class ResNetResidualBlock(ResidualBlock):
     """
     shortcut: Convolution -> BatchNorm
     """
-    def __init__(self, in_channels, out_channels, expansion=1, downsampling=1, conv=conv3x3, *args, **kwargs):
+    def __init__(self, in_channels, out_channels, expansion=1, downsampling=1, conv=partial(Conv2dAuto, kernel_size=3, bias=False), *args, **kwargs):
         super().__init__(in_channels, out_channels, *args, **kwargs)
         self.expansion, self.downsampling, self.conv = expansion, downsampling, conv
         self.shortcut = nn.Sequential(
@@ -133,6 +134,7 @@ class ResNetEncoder(nn.Module):
             block_sizes = [64, 128, 256, 512]
         super().__init__()
         self.block_sizes = block_sizes
+        self.stoch_depth_p = kwargs.get('stoch_depth_p', 0.0)
         
         self.gate = nn.Sequential(
             nn.Conv2d(in_channels, self.block_sizes[0], kernel_size=7, stride=2, padding=3, bias=False),
@@ -143,19 +145,25 @@ class ResNetEncoder(nn.Module):
         
         self.in_out_block_sizes = list(zip(block_sizes, block_sizes[1:]))
         self.blocks = nn.ModuleList([ 
-            ResNetLayer(block_sizes[0], block_sizes[0], n=[0], activation=activation, 
+            ResNetLayer(block_sizes[0], block_sizes[0], n=depths[0], activation=activation, 
                         block=block,*args, **kwargs),
             *[ResNetLayer(in_channels * block.expansion, 
                           out_channels, n=n, activation=activation, 
                           block=block, *args, **kwargs) 
               for (in_channels, out_channels), n in zip(self.in_out_block_sizes, depths[1:])]
         ])
-        
+        self._mask_blocks()
+
+    def _mask_blocks(self):
+        self.use_block = torch.rand(len(self.blocks),) > self.stoch_depth_p
         
     def forward(self, x):
         x = self.gate(x)
-        for block in self.blocks:
-            x = block(x)
+        # can take this out and modify if we want to switch blocks less frequently
+        self._mask_blocks()
+        for i, block in enumerate(self.blocks):
+            if self.use_block[i] > self.stoch_depth_p:
+                x = block(x)
         return x
 
 
@@ -188,7 +196,6 @@ class ResNet(nn.Module):
         x = self.encoder(x)
         x = self.decoder(x)
         return x
-
 
 
 def resnet18(in_channels, n_classes, block=ResNetBasicBlock, *args, **kwargs):

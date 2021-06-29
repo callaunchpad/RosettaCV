@@ -6,3 +6,4 @@ tensorboard>=1.14
 wandb
 scipy
 matplotlib
+scikit-image
