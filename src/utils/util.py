@@ -10,7 +10,10 @@ from typing import Callable
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-
+def get_num_domains(train_data):
+    for input in train_data:
+        return len(input)
+    
 def get_project_device() -> torch.device:
     """
     Gets the project device

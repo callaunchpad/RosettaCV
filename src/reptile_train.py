@@ -5,7 +5,7 @@ import torch
 import torchvision.models as models
 import torch.nn as nn
 
-from trainer.meta_trainer import meta_outer_train_loop, reptile_inner_train_loop, reptile_update_params
+from trainer.scribe_reptile import meta_outer_train_loop, reptile_inner_train_loop, reptile_update_params
 from data_loader.data_loaders import OmniglotByAlphabet
 
 def change_resnet_labels(num_labels):

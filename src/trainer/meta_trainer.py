@@ -143,6 +143,8 @@ def reptile_inner_train_loop(model, optimizer, data_loaders, loss_fn, device, nu
 
             with torch.set_grad_enabled(True):
                 preds = model(inputs)
+                print(preds.shape, inputs.shape, labels.shape)
+                print(loss_fn)
                 loss = loss_fn(preds, labels)
                 loss.backward()
                 optimizer.step()
@@ -216,6 +218,7 @@ def meta_outer_train_loop(model, optimizer, train_tasks,
 
     model.to(device)
     print(device)
+    print(model)
 
     # Turn tasks into data loaders + loss fns
     all_data_loaders = []

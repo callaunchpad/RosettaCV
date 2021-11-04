@@ -8,6 +8,7 @@ import numpy as np
 import torch.utils.data as utils
 import torch.nn as nn
 import torchvision
+import utils.util as util
 
 class GRL(Function):
     """
@@ -19,7 +20,7 @@ class GRL(Function):
         """
         "ctx" is a context object.
         """
-        net.constant = constant
+        ctx.constant = constant
         return x.view_as(x) * constant
     @staticmethod
     def backward(ctx, grad_output):
@@ -32,7 +33,7 @@ class Dann(nn.Module):
     def __init__(self, latent_dim, num_domains):
         super(Dann, self).__init__()
         self.linear1 = nn.Linear(latent_dim, 100)
-        self.batchnorm = nn.batchnorm(100)
+        self.batchnorm = nn.BatchNorm1d(100)
         self.relu = nn.ReLU()
         self.linear2 = nn.Linear(100, num_domains)
     
@@ -41,7 +42,7 @@ class Dann(nn.Module):
         alpha is a constant by which the gradient can be multiplied.
         Leaving it at 1 basically means we simply negate it.
         """
-        x = GRL.apply(x)
+        x = GRL.apply(x, alpha)
         x = self.linear1(x)
         x = self.batchnorm(x)
         x = self.relu(x)

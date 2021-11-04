@@ -12,6 +12,7 @@ import torch.nn.functional as F
 from typing import Callable, Tuple, List, Union
 from torch.utils.data import DataLoader
 from transformers import BertTokenizer
+from models.CMC.DANN import Dann
 
 """
 CONSTANTS 
@@ -76,7 +77,7 @@ def get_cmc_loss_on_dataloader(model: nn.Module, dataloader: DataLoader, loss_fn
         enc, pos, neg = get_positive_and_negative_samples(encodings, model)
 
         total_loss += loss_fn(enc, pos, neg)
-
+    
     return total_loss / len(dataloader)
 
 
@@ -136,9 +137,21 @@ def domain_confusion_loss(latent_dim, num_domains):
     Return a loss that is adversarial to the ability of the DANN network's ability
     to predict the domain of the latent space.
     """
-    dann = new Dann(latent_dim, num_domains)
+    dann = Dann(latent_dim, num_domains)
+    dann.to(util.get_project_device())
     loss = torch.nn.CrossEntropyLoss()
-    def domain_confusion_loss_helper(latent_space, real_domain):
-        domain_preds = dann(latent_space)
-        return loss(domain_preds, real_domain)
-    return domain_confusion_loss_helper
+    loss.to(util.get_project_device())
+    def domain_loss(encodings):
+        for label, encoding in enumerate(encodings):
+            if label == 0:
+                total_domain_loss = domain_confusion_loss_helper(encoding, label)
+            else:
+                total_domain_loss += domain_confusion_loss_helper(encoding, label)
+        return total_domain_loss
+    def domain_confusion_loss_helper(encoding, label):
+        label_tensor = torch.Tensor([label for i in range(len(encoding))]).long()
+        label_tensor = label_tensor.to(util.get_project_device())
+        domain_preds = dann(encoding)
+        domain_preds.to(util.get_project_device())
+        return loss(domain_preds, label_tensor)
+    return domain_loss
